@@ -5,19 +5,31 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateTaxSettingsDto } from './dto/update-tax-settings.dto';
+import { AuthenticatedUser } from '../auth/auth.types';
 
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   async overview(businessId: string) {
-    const [users, roles, permissions, branches] = await Promise.all([
+    const [users, roles, permissions, branches, business] = await Promise.all([
       this.prisma.user.findMany({ where: { businessId }, select: { id: true, email: true, firstName: true, lastName: true, status: true, roles: { select: { role: { select: { id: true, code: true, name: true } } } }, branches: { select: { branch: { select: { id: true, code: true, name: true } } } } }, orderBy: { lastName: 'asc' } }),
       this.prisma.role.findMany({ where: { businessId }, include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } }, orderBy: { name: 'asc' } }),
       this.prisma.permission.findMany({ where: { businessId }, orderBy: { code: 'asc' } }),
       this.prisma.branch.findMany({ where: { businessId, active: true }, orderBy: { name: 'asc' } }),
+      this.prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { taxesEnabled: true, ivaRate: true } }),
     ]);
-    return { users, roles, permissions, branches };
+    return { users, roles, permissions, branches, business };
+  }
+
+  async updateTaxSettings(user: AuthenticatedUser, dto: UpdateTaxSettingsDto) {
+    const before = await this.prisma.business.findUniqueOrThrow({ where: { id: user.businessId }, select: { taxesEnabled: true, ivaRate: true } });
+    await this.prisma.$transaction([
+      this.prisma.business.update({ where: { id: user.businessId }, data: { taxesEnabled: dto.taxesEnabled, ivaRate: dto.ivaRate } }),
+      this.prisma.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'TAX_SETTINGS_UPDATED', entityType: 'Business', entityId: user.businessId, before: { taxesEnabled: before.taxesEnabled, ivaRate: Number(before.ivaRate) }, after: { taxesEnabled: dto.taxesEnabled, ivaRate: dto.ivaRate } } }),
+    ]);
+    return this.overview(user.businessId);
   }
 
   async createUser(businessId: string, dto: CreateUserDto) {

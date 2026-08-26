@@ -59,7 +59,7 @@ export class SalesService {
       const itemDiscountTotal = money(prepared.reduce((sum, line) => sum + line.itemDiscount, 0));
       const invoiceDiscountPercent = dto.discountPercent ?? 0;
       const invoiceDiscount = money((subtotal - itemDiscountTotal) * invoiceDiscountPercent / 100);
-      const taxTotal = money(prepared.reduce((sum, line) => { const taxable = line.netBeforeInvoiceDiscount * (1 - invoiceDiscountPercent / 100); return sum + (business.taxesEnabled && !line.product.taxExempt ? taxable * Number(line.product.taxRate) / 100 : 0); }, 0));
+      const taxTotal = money(prepared.reduce((sum, line) => { const taxable = line.netBeforeInvoiceDiscount * (1 - invoiceDiscountPercent / 100); const rate = Number(line.product.taxRate) || Number(business.ivaRate); return sum + (business.taxesEnabled && !line.product.taxExempt ? taxable * rate / 100 : 0); }, 0));
       const discountTotal = money(itemDiscountTotal + invoiceDiscount);
       const total = money(subtotal - discountTotal + taxTotal);
 
@@ -96,7 +96,7 @@ export class SalesService {
       for (const line of prepared) {
         const allocatedInvoiceDiscount = money(line.netBeforeInvoiceDiscount * invoiceDiscountPercent / 100);
         const taxable = line.netBeforeInvoiceDiscount - allocatedInvoiceDiscount;
-        const taxRate = business.taxesEnabled && !line.product.taxExempt ? Number(line.product.taxRate) : 0;
+        const taxRate = business.taxesEnabled && !line.product.taxExempt ? (Number(line.product.taxRate) || Number(business.ivaRate)) : 0;
         const taxAmount = money(taxable * taxRate / 100);
         const invoiceItem = await tx.invoiceItem.create({ data: { invoiceId: invoice.id, productId: line.product.id, quantity: line.item.quantity, unitPrice: line.unitPrice, unitCost: line.product.purchasePrice, discountPercent: line.discountPercent, discountAmount: line.itemDiscount, taxRate, taxAmount, lineTotal: money(taxable + taxAmount) } });
         if (line.itemDiscount > 0) await tx.invoiceDiscount.create({ data: { invoiceId: invoice.id, invoiceItemId: invoiceItem.id, scope: 'ITEM', percent: line.discountPercent, amount: line.itemDiscount, reason: line.item.discountReason!.trim(), appliedById: user.id } });
