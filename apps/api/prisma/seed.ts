@@ -28,6 +28,12 @@ async function main() {
     create: { businessId: business.id, code: 'PRUEBAS', name: 'Sucursal de Pruebas' },
   });
 
+  await prisma.cashRegister.upsert({
+    where: { branchId_code: { branchId: branch.id, code: 'CAJA-01' } },
+    update: { name: 'Caja principal', active: true },
+    create: { branchId: branch.id, code: 'CAJA-01', name: 'Caja principal' },
+  });
+
   const permissions = [
     ['products.manage', 'Gestionar productos'],
     ['sales.create', 'Registrar ventas'],

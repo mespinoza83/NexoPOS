@@ -98,6 +98,7 @@ export class SalesService {
       await tx.invoiceSequence.update({ where: { id: sequence.id }, data: { next: { increment: 1 } } });
       const number = `A-${String(sequence.next).padStart(8, '0')}`;
       const cashSession = await tx.cashSession.findFirst({ where: { status: 'OPEN', cashRegister: { branchId } }, orderBy: { openedAt: 'desc' } });
+      if (cashPaid > 0 && !cashSession) throw new BadRequestException('Debe abrir una caja antes de recibir pagos en efectivo.');
       const invoice = await tx.invoice.create({ data: { branchId, cashSessionId: cashSession?.id, customerId: dto.customerId, createdById: user.id, number, currency: business.defaultCurrency, exchangeRate: business.exchangeRate, status: 'PAID', subtotal, discountTotal, taxTotal, total, changeAmount, paidAt: new Date() } });
 
       for (const line of prepared) {

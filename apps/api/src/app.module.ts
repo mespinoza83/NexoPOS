@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { AdminModule } from './admin/admin.module';
 import { SalesModule } from './sales/sales.module';
+import { CashModule } from './cash/cash.module';
 
-@Module({ imports: [PrismaModule, AuthModule, CatalogModule, AdminModule, SalesModule], controllers: [HealthController] })
+@Module({ imports: [PrismaModule, AuthModule, CatalogModule, AdminModule, SalesModule, CashModule], controllers: [HealthController] })
 export class AppModule {}
