@@ -6,6 +6,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { VoidSaleDto } from './dto/void-sale.dto';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { SuspendSaleDto } from './dto/suspend-sale.dto';
 
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -29,6 +30,10 @@ export class SalesService {
     return this.prisma.customer.create({ data: { businessId: user.businessId, name: dto.name.trim(), taxId: dto.taxId?.trim() || null, phone: dto.phone?.trim() || null, email: dto.email?.trim().toLowerCase() || null } });
   }
 
+  listSuspended(user: AuthenticatedUser, branchId?: string) { const selected = this.authorizedBranch(user, branchId); return this.prisma.suspendedSale.findMany({ where: { branchId: selected, businessId: user.businessId }, orderBy: { updatedAt: 'desc' } }); }
+  async suspend(user: AuthenticatedUser, dto: SuspendSaleDto) { const branchId = this.authorizedBranch(user, dto.branchId); const suspended = await this.prisma.suspendedSale.create({ data: { businessId: user.businessId, branchId, createdById: user.id, label: dto.label.trim(), data: JSON.parse(JSON.stringify(dto.data)) as Prisma.InputJsonValue } }); await this.prisma.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'SALE_SUSPENDED', entityType: 'SuspendedSale', entityId: suspended.id, after: JSON.parse(JSON.stringify(suspended.data)) as Prisma.InputJsonValue } }); return suspended; }
+  async cancelSuspended(user: AuthenticatedUser, suspendedId: string) { const suspended = await this.prisma.suspendedSale.findFirst({ where: { id: suspendedId, businessId: user.businessId } }); if (!suspended) throw new NotFoundException('Venta suspendida no encontrada.'); await this.prisma.$transaction([this.prisma.suspendedSale.delete({ where: { id: suspended.id } }), this.prisma.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'SUSPENDED_SALE_CANCELLED', entityType: 'SuspendedSale', entityId: suspended.id, before: JSON.parse(JSON.stringify(suspended.data)) as Prisma.InputJsonValue } })]); return { success: true }; }
+
   async list(user: AuthenticatedUser, branchId?: string) {
     const selectedBranchId = this.authorizedBranch(user, branchId);
     return this.prisma.invoice.findMany({ where: { branchId: selectedBranchId }, include: { customer: true, createdBy: { select: { firstName: true, lastName: true } }, items: { include: { product: { select: { name: true, internalCode: true } } } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true, returns: { where: { status: 'COMPLETED' }, include: { items: true } } }, orderBy: { createdAt: 'desc' }, take: 100 });
@@ -36,6 +41,7 @@ export class SalesService {
 
   async create(user: AuthenticatedUser, dto: CreateSaleDto) {
     const branchId = this.authorizedBranch(user, dto.branchId);
+    if (dto.idempotencyKey) { const existing = await this.prisma.invoice.findUnique({ where: { branchId_idempotencyKey: { branchId, idempotencyKey: dto.idempotencyKey } }, include: { items: { include: { product: true } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true } }); if (existing) return existing; }
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
     if (productIds.length !== dto.items.length) throw new BadRequestException('No repita productos en la venta; aumente la cantidad de la línea existente.');
     const hasDiscount = (dto.discountPercent ?? 0) > 0 || dto.items.some((item) => (item.discountPercent ?? 0) > 0);
@@ -99,7 +105,7 @@ export class SalesService {
       const number = `A-${String(sequence.next).padStart(8, '0')}`;
       const cashSession = await tx.cashSession.findFirst({ where: { status: 'OPEN', cashRegister: { branchId } }, orderBy: { openedAt: 'desc' } });
       if (cashPaid > 0 && !cashSession) throw new BadRequestException('Debe abrir una caja antes de recibir pagos en efectivo.');
-      const invoice = await tx.invoice.create({ data: { branchId, cashSessionId: cashSession?.id, customerId: dto.customerId, createdById: user.id, number, currency: business.defaultCurrency, exchangeRate: business.exchangeRate, status: 'PAID', subtotal, discountTotal, taxTotal, total, changeAmount, paidAt: new Date() } });
+      const invoice = await tx.invoice.create({ data: { branchId, cashSessionId: cashSession?.id, customerId: dto.customerId, createdById: user.id, number, idempotencyKey: dto.idempotencyKey, currency: business.defaultCurrency, exchangeRate: business.exchangeRate, status: 'PAID', subtotal, discountTotal, taxTotal, total, changeAmount, paidAt: new Date() } });
 
       for (const line of prepared) {
         const allocatedInvoiceDiscount = money(line.netBeforeInvoiceDiscount * invoiceDiscountPercent / 100);
@@ -117,7 +123,7 @@ export class SalesService {
       if (cashSession && cashPaid > 0) await tx.cashMovement.create({ data: { cashSessionId: cashSession.id, type: 'SALE_CASH', amount: money(cashPaid - changeAmount), referenceType: 'Invoice', referenceId: invoice.id, reason: `Venta ${number}`, createdById: user.id } });
       await tx.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'INVOICE_PAID', entityType: 'Invoice', entityId: invoice.id, after: JSON.parse(JSON.stringify({ invoice, items: dto.items, payments: dto.payments })) as Prisma.InputJsonValue } });
       return tx.invoice.findUnique({ where: { id: invoice.id }, include: { items: { include: { product: true } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true } });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }).catch(async (error: unknown) => { if ((error as { code?: string }).code === 'P2002' && dto.idempotencyKey) { const existing = await this.prisma.invoice.findUnique({ where: { branchId_idempotencyKey: { branchId, idempotencyKey: dto.idempotencyKey } }, include: { items: { include: { product: true } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true } }); if (existing) return existing; } throw error; });
   }
 
   async createReturn(user: AuthenticatedUser, invoiceId: string, dto: CreateReturnDto) {

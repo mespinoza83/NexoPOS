@@ -22,6 +22,7 @@ class SalePaymentDto {
 
 export class CreateSaleDto {
   @IsUUID() branchId!: string;
+  @IsOptional() @IsUUID() idempotencyKey?: string;
   @IsOptional() @IsUUID() customerId?: string;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => SaleItemDto) items!: SaleItemDto[];
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) discountPercent?: number;

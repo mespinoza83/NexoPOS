@@ -9,6 +9,7 @@ import { VoidSaleDto } from './dto/void-sale.dto';
 import { SalesService } from './sales.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { SuspendSaleDto } from './dto/suspend-sale.dto';
 
 @Controller('sales')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -21,4 +22,7 @@ export class SalesController {
   @Post(':invoiceId/reprint') @Permissions('invoices.reprint') reprint(@CurrentUser() user: AuthenticatedUser, @Param('invoiceId') invoiceId: string) { return this.sales.reprint(user, invoiceId); }
   @Post(':invoiceId/returns') @Permissions('returns.process') createReturn(@CurrentUser() user: AuthenticatedUser, @Param('invoiceId') invoiceId: string, @Body() dto: CreateReturnDto) { return this.sales.createReturn(user, invoiceId, dto); }
   @Post('customers') @Permissions('sales.create') createCustomer(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCustomerDto) { return this.sales.createCustomer(user, dto); }
+  @Get('suspended/list') @Permissions('sales.create') suspended(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.sales.listSuspended(user, branchId); }
+  @Post('suspended') @Permissions('sales.create') suspend(@CurrentUser() user: AuthenticatedUser, @Body() dto: SuspendSaleDto) { return this.sales.suspend(user, dto); }
+  @Post('suspended/:suspendedId/cancel') @Permissions('sales.create') cancelSuspended(@CurrentUser() user: AuthenticatedUser, @Param('suspendedId') suspendedId: string) { return this.sales.cancelSuspended(user, suspendedId); }
 }
