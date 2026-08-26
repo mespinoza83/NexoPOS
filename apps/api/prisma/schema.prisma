@@ -104,6 +104,7 @@ model Business {
   defaultCurrency   String   @default("NIO") @db.Char(3)
   exchangeRate      Decimal  @default(1) @db.Decimal(14, 6)
   ivaRate           Decimal  @default(15) @db.Decimal(5, 2)
+  taxesEnabled      Boolean  @default(true)
   invoicesElectronic Boolean  @default(false)
   receiptMessage    String?
   createdAt         DateTime @default(now())

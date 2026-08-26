@@ -30,6 +30,8 @@ async function main() {
 
   const permissions = [
     ['products.manage', 'Gestionar productos'],
+    ['sales.create', 'Registrar ventas'],
+    ['sales.negative_inventory', 'Vender con inventario negativo'],
     ['prices.change', 'Cambiar precios'],
     ['inventory.adjust', 'Ajustar inventario'],
     ['sales.discount', 'Aplicar descuentos'],
@@ -68,7 +70,7 @@ async function main() {
     update: { name: 'Cajero' },
     create: { businessId: business.id, code: 'CASHIER', name: 'Cajero', system: true },
   });
-  const cashierPermissionCodes = ['sales.discount', 'cash.manage', 'invoices.reprint'];
+  const cashierPermissionCodes = ['sales.create', 'sales.discount', 'cash.manage', 'invoices.reprint'];
   const cashierPermissions = allPermissions.filter(({ code }) => cashierPermissionCodes.includes(code));
   for (const permission of cashierPermissions) {
     await prisma.rolePermission.upsert({
@@ -96,6 +98,7 @@ async function main() {
   ['CASH', 'Efectivo', PaymentKind.CASH],
   ['TRANSFER', 'Transferencia bancaria', PaymentKind.BANK_TRANSFER],
   ['POS', 'Tarjeta POS', PaymentKind.POS],
+  ['OTHER', 'Otro método', PaymentKind.OTHER],
 ];
 
 for (const [code, name, kind] of paymentMethods) {
@@ -105,6 +108,9 @@ for (const [code, name, kind] of paymentMethods) {
     create: { businessId: business.id, code, name, kind },
   });
 }
+
+const bank = await prisma.bank.upsert({ where: { businessId_name: { businessId: business.id, name: 'Banco de Pruebas' } }, update: {}, create: { businessId: business.id, name: 'Banco de Pruebas' } });
+await prisma.posTerminal.upsert({ where: { branchId_code: { branchId: branch.id, code: 'POS-01' } }, update: { bankId: bank.id }, create: { branchId: branch.id, bankId: bank.id, code: 'POS-01', name: 'Terminal POS 01' } });
 }
 
 main().finally(() => prisma.$disconnect());
