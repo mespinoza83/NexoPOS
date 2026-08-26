@@ -128,6 +128,15 @@ export default function HomePage() {
       .finally(() => setAuthLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    const renewSession = () => { void fetch(`${apiUrl}/auth/refresh`, { method: 'POST', credentials: 'include' }).then(async (response) => { if (response.ok) { const result = await response.json() as { user?: AuthUser }; if (result.user) setUser(result.user); } }).catch(() => undefined); };
+    const interval = window.setInterval(renewSession, 10 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible') renewSession(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
+  }, [user]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
