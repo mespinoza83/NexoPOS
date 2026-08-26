@@ -4,6 +4,8 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { VoidSaleDto } from './dto/void-sale.dto';
+import { CreateReturnDto } from './dto/create-return.dto';
+import { CreateCustomerDto } from './dto/create-customer.dto';
 
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
@@ -13,18 +15,23 @@ export class SalesService {
 
   async setup(user: AuthenticatedUser, branchId?: string) {
     const selectedBranchId = this.authorizedBranch(user, branchId);
-    const [business, paymentMethods, banks, terminals] = await Promise.all([
+    const [business, paymentMethods, banks, terminals, customers] = await Promise.all([
       this.prisma.business.findUnique({ where: { id: user.businessId }, select: { defaultCurrency: true, exchangeRate: true, ivaRate: true, taxesEnabled: true } }),
       this.prisma.paymentMethod.findMany({ where: { businessId: user.businessId, active: true }, orderBy: { name: 'asc' } }),
       this.prisma.bank.findMany({ where: { businessId: user.businessId, active: true }, orderBy: { name: 'asc' } }),
       this.prisma.posTerminal.findMany({ where: { branchId: selectedBranchId, active: true }, include: { bank: { select: { id: true, name: true } } }, orderBy: { name: 'asc' } }),
+      this.prisma.customer.findMany({ where: { businessId: user.businessId, active: true }, orderBy: { name: 'asc' }, take: 500 }),
     ]);
-    return { business, paymentMethods, banks, terminals };
+    return { business, paymentMethods, banks, terminals, customers };
+  }
+
+  createCustomer(user: AuthenticatedUser, dto: CreateCustomerDto) {
+    return this.prisma.customer.create({ data: { businessId: user.businessId, name: dto.name.trim(), taxId: dto.taxId?.trim() || null, phone: dto.phone?.trim() || null, email: dto.email?.trim().toLowerCase() || null } });
   }
 
   async list(user: AuthenticatedUser, branchId?: string) {
     const selectedBranchId = this.authorizedBranch(user, branchId);
-    return this.prisma.invoice.findMany({ where: { branchId: selectedBranchId }, include: { customer: true, createdBy: { select: { firstName: true, lastName: true } }, items: { include: { product: { select: { name: true, internalCode: true } } } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true }, orderBy: { createdAt: 'desc' }, take: 100 });
+    return this.prisma.invoice.findMany({ where: { branchId: selectedBranchId }, include: { customer: true, createdBy: { select: { firstName: true, lastName: true } }, items: { include: { product: { select: { name: true, internalCode: true } } } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true, returns: { where: { status: 'COMPLETED' }, include: { items: true } } }, orderBy: { createdAt: 'desc' }, take: 100 });
   }
 
   async create(user: AuthenticatedUser, dto: CreateSaleDto) {
@@ -109,6 +116,51 @@ export class SalesService {
       if (cashSession && cashPaid > 0) await tx.cashMovement.create({ data: { cashSessionId: cashSession.id, type: 'SALE_CASH', amount: money(cashPaid - changeAmount), referenceType: 'Invoice', referenceId: invoice.id, reason: `Venta ${number}`, createdById: user.id } });
       await tx.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'INVOICE_PAID', entityType: 'Invoice', entityId: invoice.id, after: JSON.parse(JSON.stringify({ invoice, items: dto.items, payments: dto.payments })) as Prisma.InputJsonValue } });
       return tx.invoice.findUnique({ where: { id: invoice.id }, include: { items: { include: { product: true } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async createReturn(user: AuthenticatedUser, invoiceId: string, dto: CreateReturnDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, branch: { businessId: user.businessId } }, include: { items: true, returns: { where: { status: 'COMPLETED' }, include: { items: true } }, payments: { include: { paymentMethod: true } } } });
+      if (!invoice) throw new NotFoundException('Factura no encontrada.');
+      if (!['PAID', 'PARTIALLY_RETURNED'].includes(invoice.status)) throw new BadRequestException('La factura no admite devoluciones en su estado actual.');
+      const itemMap = new Map(invoice.items.map((item) => [item.id, item]));
+      if (new Set(dto.items.map((item) => item.invoiceItemId)).size !== dto.items.length) throw new BadRequestException('No repita productos en la devolución.');
+      let refundTotal = 0;
+      for (const requested of dto.items) {
+        const sold = itemMap.get(requested.invoiceItemId);
+        if (!sold) throw new BadRequestException('Uno de los productos no pertenece a la factura.');
+        const alreadyReturned = invoice.returns.flatMap((returnDoc) => returnDoc.items).filter((item) => item.invoiceItemId === sold.id).reduce((sum, item) => sum + Number(item.quantity), 0);
+        const available = Number(sold.quantity) - alreadyReturned;
+        if (requested.quantity > available) throw new BadRequestException(`La cantidad a devolver supera las ${available.toFixed(3)} unidades disponibles.`);
+        refundTotal += Number(sold.lineTotal) * requested.quantity / Number(sold.quantity);
+      }
+      refundTotal = money(refundTotal);
+      const requestedRefund = money(dto.refunds.reduce((sum, refund) => sum + refund.amount, 0));
+      if (requestedRefund !== refundTotal) throw new BadRequestException(`Los reembolsos deben sumar C$ ${refundTotal.toFixed(2)}.`);
+      const methods = await tx.paymentMethod.findMany({ where: { id: { in: dto.refunds.map((refund) => refund.paymentMethodId) }, businessId: user.businessId, active: true } });
+      if (methods.length !== new Set(dto.refunds.map((refund) => refund.paymentMethodId)).size) throw new BadRequestException('Método de reembolso no válido.');
+      const methodMap = new Map(methods.map((method) => [method.id, method]));
+      const returnDoc = await tx.return.create({ data: { invoiceId: invoice.id, number: `DEV-${Date.now()}`, status: 'COMPLETED', reason: dto.reason.trim(), createdById: user.id, approvedById: user.id, completedAt: new Date() } });
+      for (const requested of dto.items) {
+        const sold = itemMap.get(requested.invoiceItemId)!;
+        await tx.returnItem.create({ data: { returnId: returnDoc.id, invoiceItemId: sold.id, productId: sold.productId, quantity: requested.quantity } });
+        const inventory = await tx.branchInventory.findUnique({ where: { branchId_productId: { branchId: invoice.branchId, productId: sold.productId } } });
+        const previous = Number(inventory?.quantity ?? 0);
+        const resulting = previous + requested.quantity;
+        await tx.branchInventory.upsert({ where: { branchId_productId: { branchId: invoice.branchId, productId: sold.productId } }, create: { branchId: invoice.branchId, productId: sold.productId, quantity: resulting, minimumQuantity: 0 }, update: { quantity: resulting } });
+        await tx.inventoryMovement.create({ data: { branchId: invoice.branchId, productId: sold.productId, type: 'RETURN', quantity: requested.quantity, previousQuantity: previous, resultingQuantity: resulting, referenceType: 'Return', referenceId: returnDoc.id, reason: dto.reason.trim(), createdById: user.id } });
+      }
+      for (const refund of dto.refunds) await tx.returnRefund.create({ data: { returnId: returnDoc.id, paymentMethodId: refund.paymentMethodId, amount: refund.amount, bankId: refund.bankId, posTerminalId: refund.posTerminalId, reference: refund.reference?.trim() || null } });
+      const cashRefund = money(dto.refunds.filter((refund) => methodMap.get(refund.paymentMethodId)?.kind === PaymentKind.CASH).reduce((sum, refund) => sum + refund.amount, 0));
+      if (cashRefund > 0 && invoice.cashSessionId) await tx.cashMovement.create({ data: { cashSessionId: invoice.cashSessionId, type: 'RETURN_CASH', amount: cashRefund, referenceType: 'Return', referenceId: returnDoc.id, reason: dto.reason.trim(), createdById: user.id } });
+      const totalSold = invoice.items.reduce((sum, item) => sum + Number(item.quantity), 0);
+      const previouslyReturned = invoice.returns.flatMap((returnDoc) => returnDoc.items).reduce((sum, item) => sum + Number(item.quantity), 0);
+      const nowReturned = dto.items.reduce((sum, item) => sum + item.quantity, 0);
+      const status = previouslyReturned + nowReturned >= totalSold ? 'FULLY_RETURNED' : 'PARTIALLY_RETURNED';
+      await tx.invoice.update({ where: { id: invoice.id }, data: { status } });
+      await tx.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'RETURN_COMPLETED', entityType: 'Return', entityId: returnDoc.id, after: JSON.parse(JSON.stringify({ invoiceId, refundTotal, ...dto })) as Prisma.InputJsonValue, reason: dto.reason.trim() } });
+      return tx.return.findUnique({ where: { id: returnDoc.id }, include: { items: { include: { product: true } }, refunds: { include: { paymentMethod: true } } } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 

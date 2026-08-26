@@ -7,6 +7,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { VoidSaleDto } from './dto/void-sale.dto';
 import { SalesService } from './sales.service';
+import { CreateReturnDto } from './dto/create-return.dto';
+import { CreateCustomerDto } from './dto/create-customer.dto';
 
 @Controller('sales')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -17,4 +19,6 @@ export class SalesController {
   @Post() @Permissions('sales.create') create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateSaleDto) { return this.sales.create(user, dto); }
   @Post(':invoiceId/void') @Permissions('sales.void') void(@CurrentUser() user: AuthenticatedUser, @Param('invoiceId') invoiceId: string, @Body() dto: VoidSaleDto) { return this.sales.void(user, invoiceId, dto); }
   @Post(':invoiceId/reprint') @Permissions('invoices.reprint') reprint(@CurrentUser() user: AuthenticatedUser, @Param('invoiceId') invoiceId: string) { return this.sales.reprint(user, invoiceId); }
+  @Post(':invoiceId/returns') @Permissions('returns.process') createReturn(@CurrentUser() user: AuthenticatedUser, @Param('invoiceId') invoiceId: string, @Body() dto: CreateReturnDto) { return this.sales.createReturn(user, invoiceId, dto); }
+  @Post('customers') @Permissions('sales.create') createCustomer(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCustomerDto) { return this.sales.createCustomer(user, dto); }
 }
