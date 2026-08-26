@@ -108,6 +108,7 @@ export default function HomePage() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [adminData, setAdminData] = useState<AdminData | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState('');
 
   useEffect(() => {
     authenticatedFetch(`${apiUrl}/auth/me`)
@@ -179,9 +180,15 @@ export default function HomePage() {
   async function openAdmin() {
     setActiveView('admin');
     setAdminLoading(true);
+    setAdminError('');
     try {
       const response = await authenticatedFetch(`${apiUrl}/admin/access`);
-      if (response.ok) setAdminData((await response.json()) as AdminData);
+      const result = (await response.json().catch(() => ({}))) as AdminData & { message?: string };
+      if (!response.ok) throw new Error(result.message ?? 'No se pudo cargar Administración.');
+      setAdminData(result);
+    } catch (requestError) {
+      setAdminData(null);
+      setAdminError(requestError instanceof Error ? requestError.message : 'No se pudo conectar con la API.');
     } finally {
       setAdminLoading(false);
     }
@@ -198,7 +205,7 @@ export default function HomePage() {
   }
 
   if (user) {
-    if (activeView === 'admin' && adminData) return <AdminView user={user} data={adminData} loading={adminLoading} onBack={() => setActiveView('dashboard')} onSales={openSales} onInventory={openCatalog} onRefresh={openAdmin} onLogout={handleLogout} />;
+    if (activeView === 'admin') return adminData ? <AdminView user={user} data={adminData} loading={adminLoading} onBack={() => setActiveView('dashboard')} onSales={openSales} onInventory={openCatalog} onRefresh={openAdmin} onLogout={handleLogout} /> : <AdminStatusView loading={adminLoading} error={adminError} onRetry={openAdmin} onBack={() => setActiveView('dashboard')} />;
     if (activeView === 'inventory') {
       return <InventoryView user={user} products={products} categories={categories} movements={inventoryMovements} entries={inventoryEntries} counts={inventoryCounts} loading={catalogLoading} onRefresh={openCatalog} onBack={() => setActiveView('dashboard')} onSales={openSales} onAdmin={openAdmin} onLogout={handleLogout} />;
     }
@@ -489,6 +496,10 @@ function InventoryView({ user, products, categories, movements, entries, counts,
       </section>
     </main>
   );
+}
+
+function AdminStatusView({ loading, error, onRetry, onBack }: { loading: boolean; error: string; onRetry: () => Promise<void>; onBack: () => void }) {
+  return <main className="admin-status-page"><section className="admin-status-card">{loading ? <><span className="loading-spinner dark-spinner" /><h1>Cargando Administración</h1><p>Consultando usuarios, roles y configuración.</p></> : <><span className="admin-status-icon">!</span><h1>No se pudo abrir Administración</h1><p>{error || 'La API no devolvió la información requerida.'}</p><div><button className="secondary-action" type="button" onClick={onBack}>Volver al resumen</button><button className="primary-action" type="button" onClick={() => { void onRetry(); }}>Reintentar</button></div></>}</section></main>;
 }
 
 function AdminView({ user, data, loading, onBack, onSales, onInventory, onRefresh, onLogout }: { user: AuthUser; data: AdminData; loading: boolean; onBack: () => void; onSales: () => Promise<void>; onInventory: () => Promise<void>; onRefresh: () => Promise<void>; onLogout: () => void }) {
