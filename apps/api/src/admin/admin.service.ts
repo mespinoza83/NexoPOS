@@ -7,6 +7,7 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateTaxSettingsDto } from './dto/update-tax-settings.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
 @Injectable()
 export class AdminService {
@@ -18,7 +19,7 @@ export class AdminService {
       this.prisma.role.findMany({ where: { businessId }, include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } }, orderBy: { name: 'asc' } }),
       this.prisma.permission.findMany({ where: { businessId }, orderBy: { code: 'asc' } }),
       this.prisma.branch.findMany({ where: { businessId, active: true }, orderBy: { name: 'asc' } }),
-      this.prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { taxesEnabled: true, ivaRate: true } }),
+      this.prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { legalName: true, commercialName: true, taxId: true, address: true, phone: true, email: true, logoUrl: true, defaultCurrency: true, timezone: true, receiptPaperWidth: true, receiptMessage: true, taxesEnabled: true, ivaRate: true } }),
     ]);
     return { users, roles, permissions, branches, business };
   }
@@ -28,6 +29,16 @@ export class AdminService {
     await this.prisma.$transaction([
       this.prisma.business.update({ where: { id: user.businessId }, data: { taxesEnabled: dto.taxesEnabled, ivaRate: dto.ivaRate } }),
       this.prisma.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'TAX_SETTINGS_UPDATED', entityType: 'Business', entityId: user.businessId, before: { taxesEnabled: before.taxesEnabled, ivaRate: Number(before.ivaRate) }, after: { taxesEnabled: dto.taxesEnabled, ivaRate: dto.ivaRate } } }),
+    ]);
+    return this.overview(user.businessId);
+  }
+
+  async updateBusinessSettings(user: AuthenticatedUser, dto: UpdateBusinessSettingsDto) {
+    const normalized = { ...dto, defaultCurrency: dto.defaultCurrency.toUpperCase(), commercialName: dto.commercialName || null, taxId: dto.taxId || null, address: dto.address || null, phone: dto.phone || null, email: dto.email || null, logoUrl: dto.logoUrl || null, receiptMessage: dto.receiptMessage || null };
+    const before = await this.prisma.business.findUniqueOrThrow({ where: { id: user.businessId }, select: { legalName: true, commercialName: true, taxId: true, address: true, phone: true, email: true, logoUrl: true, defaultCurrency: true, timezone: true, receiptPaperWidth: true, receiptMessage: true } });
+    await this.prisma.$transaction([
+      this.prisma.business.update({ where: { id: user.businessId }, data: normalized }),
+      this.prisma.auditLog.create({ data: { businessId: user.businessId, userId: user.id, action: 'BUSINESS_SETTINGS_UPDATED', entityType: 'Business', entityId: user.businessId, before, after: normalized } }),
     ]);
     return this.overview(user.businessId);
   }

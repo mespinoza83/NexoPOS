@@ -17,7 +17,7 @@ export class SalesService {
   async setup(user: AuthenticatedUser, branchId?: string) {
     const selectedBranchId = this.authorizedBranch(user, branchId);
     const [business, paymentMethods, banks, terminals, customers] = await Promise.all([
-      this.prisma.business.findUnique({ where: { id: user.businessId }, select: { defaultCurrency: true, exchangeRate: true, ivaRate: true, taxesEnabled: true } }),
+      this.prisma.business.findUnique({ where: { id: user.businessId }, select: { legalName: true, commercialName: true, taxId: true, address: true, phone: true, logoUrl: true, defaultCurrency: true, exchangeRate: true, ivaRate: true, taxesEnabled: true, timezone: true, receiptPaperWidth: true, receiptMessage: true } }),
       this.prisma.paymentMethod.findMany({ where: { businessId: user.businessId, active: true }, orderBy: { name: 'asc' } }),
       this.prisma.bank.findMany({ where: { businessId: user.businessId, active: true }, orderBy: { name: 'asc' } }),
       this.prisma.posTerminal.findMany({ where: { branchId: selectedBranchId, active: true }, include: { bank: { select: { id: true, name: true } } }, orderBy: { name: 'asc' } }),
@@ -49,14 +49,15 @@ export class SalesService {
     const status = Object.values(InvoiceStatus).includes(query.status as InvoiceStatus) ? query.status as InvoiceStatus : undefined;
     const where: Prisma.InvoiceWhereInput = { branchId, ...(status ? { status } : {}), ...(query.userId ? { createdById: query.userId } : {}), ...(query.paymentMethodId ? { payments: { some: { paymentMethodId: query.paymentMethodId } } } : {}), ...((dateFrom || dateTo) ? { createdAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } } : {}), ...(search ? { OR: [{ number: { contains: search, mode: 'insensitive' } }, { customer: { name: { contains: search, mode: 'insensitive' } } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: 'insensitive' } }, { internalCode: { contains: search, mode: 'insensitive' } }, { barcode: { contains: search, mode: 'insensitive' } }] } } } }, { payments: { some: { reference: { contains: search, mode: 'insensitive' } } } }] } : {}) };
     const include = { customer: true, createdBy: { select: { id: true, firstName: true, lastName: true } }, items: { include: { product: { select: { name: true, internalCode: true } } } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true, returns: { where: { status: 'COMPLETED' as const }, include: { items: true } } };
-    const [items, totalRecords, totals, users, paymentMethods] = await Promise.all([
+    const [items, totalRecords, totals, users, paymentMethods, business] = await Promise.all([
       this.prisma.invoice.findMany({ where, include, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
       this.prisma.invoice.count({ where }),
       this.prisma.invoice.aggregate({ where, _sum: { subtotal: true, discountTotal: true, taxTotal: true, total: true } }),
       this.prisma.user.findMany({ where: { businessId: user.businessId, invoices: { some: { branchId } } }, select: { id: true, firstName: true, lastName: true }, orderBy: { firstName: 'asc' } }),
       this.prisma.paymentMethod.findMany({ where: { businessId: user.businessId }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+      this.prisma.business.findUniqueOrThrow({ where: { id: user.businessId }, select: { legalName: true, commercialName: true, taxId: true, address: true, phone: true, logoUrl: true, defaultCurrency: true, timezone: true, receiptPaperWidth: true, receiptMessage: true } }),
     ]);
-    return { items, pagination: { page, pageSize, totalRecords, totalPages: Math.max(1, Math.ceil(totalRecords / pageSize)) }, totals: { subtotal: totals._sum.subtotal ?? 0, discounts: totals._sum.discountTotal ?? 0, taxes: totals._sum.taxTotal ?? 0, total: totals._sum.total ?? 0 }, filters: { users, paymentMethods } };
+    return { items, business, pagination: { page, pageSize, totalRecords, totalPages: Math.max(1, Math.ceil(totalRecords / pageSize)) }, totals: { subtotal: totals._sum.subtotal ?? 0, discounts: totals._sum.discountTotal ?? 0, taxes: totals._sum.taxTotal ?? 0, total: totals._sum.total ?? 0 }, filters: { users, paymentMethods } };
   }
 
   async create(user: AuthenticatedUser, dto: CreateSaleDto) {

@@ -11,6 +11,7 @@ import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateTaxSettingsDto } from './dto/update-tax-settings.dto';
+import { UpdateBusinessSettingsDto } from './dto/update-business-settings.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -35,4 +36,7 @@ export class AdminController {
 
   @Patch('settings/taxes')
   updateTaxSettings(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateTaxSettingsDto) { return this.admin.updateTaxSettings(user, dto); }
+
+  @Patch('settings/business')
+  updateBusinessSettings(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateBusinessSettingsDto) { return this.admin.updateBusinessSettings(user, dto); }
 }
