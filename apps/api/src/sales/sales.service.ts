@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { PaymentKind, Prisma } from '@prisma/client';
+import { InvoiceStatus, PaymentKind, Prisma } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -37,6 +37,26 @@ export class SalesService {
   async list(user: AuthenticatedUser, branchId?: string) {
     const selectedBranchId = this.authorizedBranch(user, branchId);
     return this.prisma.invoice.findMany({ where: { branchId: selectedBranchId }, include: { customer: true, createdBy: { select: { firstName: true, lastName: true } }, items: { include: { product: { select: { name: true, internalCode: true } } } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true, returns: { where: { status: 'COMPLETED' }, include: { items: true } } }, orderBy: { createdAt: 'desc' }, take: 100 });
+  }
+
+  async history(user: AuthenticatedUser, query: Record<string, string | undefined>) {
+    const branchId = this.authorizedBranch(user, query.branchId);
+    const page = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.min(100, Math.max(5, Number(query.pageSize) || 10));
+    const search = query.search?.trim();
+    const dateFrom = query.dateFrom ? new Date(`${query.dateFrom}T00:00:00`) : undefined;
+    const dateTo = query.dateTo ? new Date(`${query.dateTo}T23:59:59.999`) : undefined;
+    const status = Object.values(InvoiceStatus).includes(query.status as InvoiceStatus) ? query.status as InvoiceStatus : undefined;
+    const where: Prisma.InvoiceWhereInput = { branchId, ...(status ? { status } : {}), ...(query.userId ? { createdById: query.userId } : {}), ...(query.paymentMethodId ? { payments: { some: { paymentMethodId: query.paymentMethodId } } } : {}), ...((dateFrom || dateTo) ? { createdAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } } : {}), ...(search ? { OR: [{ number: { contains: search, mode: 'insensitive' } }, { customer: { name: { contains: search, mode: 'insensitive' } } }, { items: { some: { product: { OR: [{ name: { contains: search, mode: 'insensitive' } }, { internalCode: { contains: search, mode: 'insensitive' } }, { barcode: { contains: search, mode: 'insensitive' } }] } } } }, { payments: { some: { reference: { contains: search, mode: 'insensitive' } } } }] } : {}) };
+    const include = { customer: true, createdBy: { select: { id: true, firstName: true, lastName: true } }, items: { include: { product: { select: { name: true, internalCode: true } } } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true, returns: { where: { status: 'COMPLETED' as const }, include: { items: true } } };
+    const [items, totalRecords, totals, users, paymentMethods] = await Promise.all([
+      this.prisma.invoice.findMany({ where, include, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+      this.prisma.invoice.count({ where }),
+      this.prisma.invoice.aggregate({ where, _sum: { subtotal: true, discountTotal: true, taxTotal: true, total: true } }),
+      this.prisma.user.findMany({ where: { businessId: user.businessId, invoices: { some: { branchId } } }, select: { id: true, firstName: true, lastName: true }, orderBy: { firstName: 'asc' } }),
+      this.prisma.paymentMethod.findMany({ where: { businessId: user.businessId }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    ]);
+    return { items, pagination: { page, pageSize, totalRecords, totalPages: Math.max(1, Math.ceil(totalRecords / pageSize)) }, totals: { subtotal: totals._sum.subtotal ?? 0, discounts: totals._sum.discountTotal ?? 0, taxes: totals._sum.taxTotal ?? 0, total: totals._sum.total ?? 0 }, filters: { users, paymentMethods } };
   }
 
   async create(user: AuthenticatedUser, dto: CreateSaleDto) {
