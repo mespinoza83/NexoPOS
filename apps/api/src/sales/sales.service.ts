@@ -86,6 +86,21 @@ export class SalesService {
     return { products, business, totals: products.reduce((sum, product) => ({ soldQuantity: sum.soldQuantity + product.soldQuantity, returnedQuantity: sum.returnedQuantity + product.returnedQuantity, netQuantity: sum.netQuantity + product.netQuantity, netSales: money(sum.netSales + product.netSales), cost: money(sum.cost + product.cost), estimatedProfit: money(sum.estimatedProfit + product.estimatedProfit) }), { soldQuantity: 0, returnedQuantity: 0, netQuantity: 0, netSales: 0, cost: 0, estimatedProfit: 0 }) };
   }
 
+  async reportsDashboard(user: AuthenticatedUser, requestedBranchId?: string, requestedDays?: string) {
+    const branchId = this.authorizedBranch(user, requestedBranchId); const days = Math.min(90, Math.max(7, Number(requestedDays) || 30)); const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - days + 1);
+    const [invoices, inventory, cashSessions] = await Promise.all([
+      this.prisma.invoice.findMany({ where: { branchId, createdAt: { gte: from }, status: { in: [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_RETURNED, InvoiceStatus.FULLY_RETURNED] } }, include: { payments: { include: { paymentMethod: { select: { name: true } } } }, items: { include: { product: { select: { id: true, name: true } } } } } }),
+      this.prisma.branchInventory.findMany({ where: { branchId, product: { businessId: user.businessId } }, select: { quantity: true, minimumQuantity: true } }),
+      this.prisma.cashSession.findMany({ where: { cashRegister: { branchId }, openedAt: { gte: from }, status: { not: 'OPEN' } }, select: { difference: true } }),
+    ]);
+    const dailyMap = new Map<string, number>(); for (let index = 0; index < days; index += 1) { const date = new Date(from); date.setDate(from.getDate() + index); dailyMap.set(date.toISOString().slice(0, 10), 0); }
+    const paymentMap = new Map<string, number>(); const productMap = new Map<string, { name: string; quantity: number; sales: number }>();
+    for (const invoice of invoices) { const day = invoice.createdAt.toISOString().slice(0, 10); dailyMap.set(day, money((dailyMap.get(day) ?? 0) + Number(invoice.total))); for (const payment of invoice.payments) paymentMap.set(payment.paymentMethod.name, money((paymentMap.get(payment.paymentMethod.name) ?? 0) + Number(payment.amount))); for (const item of invoice.items) { const current = productMap.get(item.productId) ?? { name: item.product.name, quantity: 0, sales: 0 }; current.quantity += Number(item.quantity); current.sales = money(current.sales + Number(item.lineTotal)); productMap.set(item.productId, current); } }
+    const alertCount = inventory.filter((item) => Number(item.quantity) <= 0 || (Number(item.minimumQuantity) > 0 && Number(item.quantity) <= Number(item.minimumQuantity) * 1.2)).length;
+    const totalSales = money(invoices.reduce((sum, invoice) => sum + Number(invoice.total), 0)); const totalCost = money(invoices.flatMap((invoice) => invoice.items).reduce((sum, item) => sum + Number(item.unitCost) * Number(item.quantity), 0)); const salesBeforeTax = money(invoices.reduce((sum, invoice) => sum + Number(invoice.total) - Number(invoice.taxTotal), 0));
+    return { periodDays: days, summary: { invoices: invoices.length, totalSales, estimatedProfit: money(salesBeforeTax - totalCost), inventoryAlerts: alertCount, cashDifference: money(cashSessions.reduce((sum, session) => sum + Number(session.difference ?? 0), 0)) }, dailySales: [...dailyMap].map(([date, total]) => ({ date, total })), paymentMethods: [...paymentMap].map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total), topProducts: [...productMap.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 8) };
+  }
+
   async create(user: AuthenticatedUser, dto: CreateSaleDto) {
     const branchId = this.authorizedBranch(user, dto.branchId);
     if (dto.idempotencyKey) { const existing = await this.prisma.invoice.findUnique({ where: { branchId_idempotencyKey: { branchId, idempotencyKey: dto.idempotencyKey } }, include: { items: { include: { product: true } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true } }); if (existing) return existing; }
