@@ -82,7 +82,8 @@ export class SalesService {
       grouped.set(item.productId, current);
     }
     const products = [...grouped.values()].sort((a, b) => b.netSales - a.netSales);
-    return { products, totals: products.reduce((sum, product) => ({ soldQuantity: sum.soldQuantity + product.soldQuantity, returnedQuantity: sum.returnedQuantity + product.returnedQuantity, netQuantity: sum.netQuantity + product.netQuantity, netSales: money(sum.netSales + product.netSales), cost: money(sum.cost + product.cost), estimatedProfit: money(sum.estimatedProfit + product.estimatedProfit) }), { soldQuantity: 0, returnedQuantity: 0, netQuantity: 0, netSales: 0, cost: 0, estimatedProfit: 0 }) };
+    const business = await this.prisma.business.findUniqueOrThrow({ where: { id: user.businessId }, select: { legalName: true, commercialName: true, taxId: true, address: true, phone: true, defaultCurrency: true, timezone: true, receiptMessage: true, receiptPaperWidth: true } });
+    return { products, business, totals: products.reduce((sum, product) => ({ soldQuantity: sum.soldQuantity + product.soldQuantity, returnedQuantity: sum.returnedQuantity + product.returnedQuantity, netQuantity: sum.netQuantity + product.netQuantity, netSales: money(sum.netSales + product.netSales), cost: money(sum.cost + product.cost), estimatedProfit: money(sum.estimatedProfit + product.estimatedProfit) }), { soldQuantity: 0, returnedQuantity: 0, netQuantity: 0, netSales: 0, cost: 0, estimatedProfit: 0 }) };
   }
 
   async create(user: AuthenticatedUser, dto: CreateSaleDto) {
