@@ -29,6 +29,9 @@ export class CatalogController {
   @Get('inventory-movements')
   inventoryMovements(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.catalog.listInventoryMovements(user, branchId); }
 
+  @Get('inventory-report')
+  inventoryReport(@CurrentUser() user: AuthenticatedUser, @Query() query: Record<string, string | undefined>) { return this.catalog.inventoryReport(user, query); }
+
   @Get('inventory-entries')
   inventoryEntries(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.catalog.listInventoryEntries(user, branchId); }
 

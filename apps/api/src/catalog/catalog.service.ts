@@ -48,6 +48,15 @@ export class CatalogService {
     return movements.map((movement) => ({ ...movement, responsibleName: names.get(movement.createdById) ?? 'Usuario no disponible' }));
   }
 
+  async inventoryReport(user: AuthenticatedUser, query: Record<string, string | undefined>) {
+    const branchId = this.authorizedBranch(user, query.branchId);
+    const search = query.search?.trim();
+    const products = await this.prisma.product.findMany({ where: { businessId: user.businessId, ...(query.categoryId ? { categoryId: query.categoryId } : {}), ...(search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { internalCode: { contains: search, mode: 'insensitive' } }, { barcode: { contains: search, mode: 'insensitive' } }] } : {}) }, select: { id: true, internalCode: true, barcode: true, name: true, status: true, purchasePrice: true, category: { select: { id: true, name: true } }, inventory: { where: { branchId }, select: { quantity: true, minimumQuantity: true } }, inventoryMovements: { where: { branchId }, select: { createdAt: true }, orderBy: { createdAt: 'desc' }, take: 1 } }, orderBy: { name: 'asc' } });
+    const rows = products.map((product) => { const quantity = Number(product.inventory[0]?.quantity ?? 0); const minimumQuantity = Number(product.inventory[0]?.minimumQuantity ?? 0); const unitCost = Number(product.purchasePrice); const stockLevel = quantity <= 0 ? 'OUT_OF_STOCK' : minimumQuantity <= 0 ? 'HEALTHY' : quantity < minimumQuantity ? 'BELOW_MINIMUM' : quantity === minimumQuantity ? 'AT_MINIMUM' : quantity <= minimumQuantity * 1.2 ? 'NEAR_MINIMUM' : 'HEALTHY'; return { id: product.id, internalCode: product.internalCode, barcode: product.barcode, name: product.name, productStatus: product.status, category: product.category, quantity, minimumQuantity, unitCost, inventoryValue: Math.round(quantity * unitCost * 100) / 100, stockLevel, lastMovementAt: product.inventoryMovements[0]?.createdAt ?? null }; });
+    const filtered = query.stockLevel ? rows.filter((row) => row.stockLevel === query.stockLevel) : rows;
+    return { products: filtered, categories: await this.prisma.category.findMany({ where: { businessId: user.businessId, active: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }), totals: { products: filtered.length, units: filtered.reduce((sum, row) => sum + row.quantity, 0), value: Math.round(filtered.reduce((sum, row) => sum + row.inventoryValue, 0) * 100) / 100, alerts: filtered.filter((row) => row.stockLevel !== 'HEALTHY').length } };
+  }
+
   async listInventoryEntries(user: AuthenticatedUser, branchId?: string) {
     const selectedBranchId = this.authorizedBranch(user, branchId);
     const entries = await this.prisma.inventoryEntry.findMany({ where: { branchId: selectedBranchId }, include: { items: { include: { product: { select: { id: true, internalCode: true, name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 100 });
