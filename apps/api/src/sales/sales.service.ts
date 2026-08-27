@@ -60,6 +60,31 @@ export class SalesService {
     return { items, business, pagination: { page, pageSize, totalRecords, totalPages: Math.max(1, Math.ceil(totalRecords / pageSize)) }, totals: { subtotal: totals._sum.subtotal ?? 0, discounts: totals._sum.discountTotal ?? 0, taxes: totals._sum.taxTotal ?? 0, total: totals._sum.total ?? 0 }, filters: { users, paymentMethods } };
   }
 
+  async productsReport(user: AuthenticatedUser, query: Record<string, string | undefined>) {
+    const branchId = this.authorizedBranch(user, query.branchId);
+    const dateFrom = query.dateFrom ? new Date(`${query.dateFrom}T00:00:00`) : undefined;
+    const dateTo = query.dateTo ? new Date(`${query.dateTo}T23:59:59.999`) : undefined;
+    const search = query.search?.trim();
+    const items = await this.prisma.invoiceItem.findMany({
+      where: { invoice: { branchId, status: { in: [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_RETURNED, InvoiceStatus.FULLY_RETURNED] }, ...((dateFrom || dateTo) ? { createdAt: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } } : {}) }, ...(search ? { product: { OR: [{ name: { contains: search, mode: 'insensitive' } }, { internalCode: { contains: search, mode: 'insensitive' } }, { barcode: { contains: search, mode: 'insensitive' } }] } } : {}) },
+      include: { product: { select: { id: true, internalCode: true, name: true, category: { select: { name: true } } } }, returnItems: { where: { returnDoc: { status: 'COMPLETED' } }, select: { quantity: true } } },
+    });
+    const grouped = new Map<string, { productId: string; internalCode: string; name: string; category: string; soldQuantity: number; returnedQuantity: number; netQuantity: number; netSales: number; cost: number; estimatedProfit: number }>();
+    for (const item of items) {
+      const soldQuantity = Number(item.quantity);
+      const returnedQuantity = item.returnItems.reduce((sum, returned) => sum + Number(returned.quantity), 0);
+      const netQuantity = Math.max(0, soldQuantity - returnedQuantity);
+      const ratio = soldQuantity > 0 ? netQuantity / soldQuantity : 0;
+      const netSales = money((Number(item.lineTotal) - Number(item.taxAmount)) * ratio);
+      const cost = money(Number(item.unitCost) * netQuantity);
+      const current = grouped.get(item.productId) ?? { productId: item.product.id, internalCode: item.product.internalCode, name: item.product.name, category: item.product.category.name, soldQuantity: 0, returnedQuantity: 0, netQuantity: 0, netSales: 0, cost: 0, estimatedProfit: 0 };
+      current.soldQuantity += soldQuantity; current.returnedQuantity += returnedQuantity; current.netQuantity += netQuantity; current.netSales = money(current.netSales + netSales); current.cost = money(current.cost + cost); current.estimatedProfit = money(current.netSales - current.cost);
+      grouped.set(item.productId, current);
+    }
+    const products = [...grouped.values()].sort((a, b) => b.netSales - a.netSales);
+    return { products, totals: products.reduce((sum, product) => ({ soldQuantity: sum.soldQuantity + product.soldQuantity, returnedQuantity: sum.returnedQuantity + product.returnedQuantity, netQuantity: sum.netQuantity + product.netQuantity, netSales: money(sum.netSales + product.netSales), cost: money(sum.cost + product.cost), estimatedProfit: money(sum.estimatedProfit + product.estimatedProfit) }), { soldQuantity: 0, returnedQuantity: 0, netQuantity: 0, netSales: 0, cost: 0, estimatedProfit: 0 }) };
+  }
+
   async create(user: AuthenticatedUser, dto: CreateSaleDto) {
     const branchId = this.authorizedBranch(user, dto.branchId);
     if (dto.idempotencyKey) { const existing = await this.prisma.invoice.findUnique({ where: { branchId_idempotencyKey: { branchId, idempotencyKey: dto.idempotencyKey } }, include: { items: { include: { product: true } }, payments: { include: { paymentMethod: true, bank: true, posTerminal: true } }, discounts: true } }); if (existing) return existing; }
