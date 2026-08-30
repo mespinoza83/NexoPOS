@@ -177,6 +177,13 @@ button:disabled { cursor: wait; opacity: .65; }
 .vertical-bars { align-items: flex-end; border-bottom: 1px solid #dfe8eb; display: flex; gap: .35rem; height: 220px; overflow-x: auto; padding: 0 .35rem; }
 .vertical-bar { align-items: center; display: flex; flex: 1 0 20px; flex-direction: column; height: 100%; justify-content: flex-end; min-width: 20px; }
 .vertical-bar > span { background: linear-gradient(180deg, #21939b, var(--teal)); border-radius: 3px 3px 0 0; min-height: 2px; width: min(72%, 28px); }
+.vertical-bar:nth-child(7n + 1) > span { background: linear-gradient(180deg, #2ba6a8, #167d86); }
+.vertical-bar:nth-child(7n + 2) > span { background: linear-gradient(180deg, #f28a68, #e45f48); }
+.vertical-bar:nth-child(7n + 3) > span { background: linear-gradient(180deg, #e9bd58, #d99a2b); }
+.vertical-bar:nth-child(7n + 4) > span { background: linear-gradient(180deg, #6e9fdb, #477bbd); }
+.vertical-bar:nth-child(7n + 5) > span { background: linear-gradient(180deg, #8e79c8, #6953a6); }
+.vertical-bar:nth-child(7n + 6) > span { background: linear-gradient(180deg, #5db88b, #338762); }
+.vertical-bar:nth-child(7n) > span { background: linear-gradient(180deg, #dc75a4, #b84e7e); }
 .vertical-bar small { color: #91a3ac; font: .52rem 'Trebuchet MS', sans-serif; margin: .4rem 0 .3rem; white-space: nowrap; }
 .horizontal-bars { display: grid; gap: .85rem; }
 .horizontal-bar-label { align-items: center; color: #607985; display: flex; font: .65rem 'Trebuchet MS', sans-serif; justify-content: space-between; margin-bottom: .3rem; }
@@ -184,6 +191,16 @@ button:disabled { cursor: wait; opacity: .65; }
 .horizontal-bar-track { background: #edf3f4; border-radius: 10px; display: block; height: .55rem; overflow: hidden; width: 100%; }
 .horizontal-bar-track span { background: var(--teal); border-radius: inherit; display: block; height: 100%; min-width: 2px; }
 .horizontal-bar-track span.gold-bar { background: #dda33b; }
+.report-chart-grid > .report-chart:nth-child(2) .horizontal-bars > div:nth-child(5n + 1) .horizontal-bar-track span { background: #16858d; }
+.report-chart-grid > .report-chart:nth-child(2) .horizontal-bars > div:nth-child(5n + 2) .horizontal-bar-track span { background: #e4674f; }
+.report-chart-grid > .report-chart:nth-child(2) .horizontal-bars > div:nth-child(5n + 3) .horizontal-bar-track span { background: #d99a2b; }
+.report-chart-grid > .report-chart:nth-child(2) .horizontal-bars > div:nth-child(5n + 4) .horizontal-bar-track span { background: #527fbd; }
+.report-chart-grid > .report-chart:nth-child(2) .horizontal-bars > div:nth-child(5n) .horizontal-bar-track span { background: #735daf; }
+.top-products-chart .horizontal-bars > div:nth-child(5n + 1) .gold-bar { background: #dda33b; }
+.top-products-chart .horizontal-bars > div:nth-child(5n + 2) .gold-bar { background: #e4674f; }
+.top-products-chart .horizontal-bars > div:nth-child(5n + 3) .gold-bar { background: #218b91; }
+.top-products-chart .horizontal-bars > div:nth-child(5n + 4) .gold-bar { background: #557fbd; }
+.top-products-chart .horizontal-bars > div:nth-child(5n) .gold-bar { background: #6d9f72; }
 .report-chart header { align-items: baseline; display: flex; justify-content: space-between; margin-bottom: 1rem; }
 .report-chart header > span { color: #8297a0; font: .62rem 'Trebuchet MS', sans-serif; }
 .bank-row { grid-template-columns: 2rem minmax(140px, 1fr) auto auto; }
