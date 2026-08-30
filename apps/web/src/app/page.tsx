@@ -822,9 +822,79 @@ function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, 
     if (!branchSelect) return;
     branchSelect.name = 'branchIds';
     branchSelect.multiple = true;
-    branchSelect.size = Math.min(4, Math.max(2, data.branches.filter((branch) => branch.active).length));
     branchSelect.setAttribute('aria-label', 'Sucursales autorizadas');
     if (branchSelect.options[0]?.value === '') { branchSelect.options[0].text = 'Seleccione una o varias sucursales'; branchSelect.options[0].disabled = true; }
+    branchSelect.classList.add('branch-multiselect-native');
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'branch-multiselect';
+    const caption = document.createElement('span');
+    caption.className = 'branch-multiselect-caption';
+    caption.textContent = 'Sucursales autorizadas';
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'branch-multiselect-trigger';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    const selections = document.createElement('span');
+    selections.className = 'branch-multiselect-values';
+    const chevron = document.createElement('span');
+    chevron.className = 'branch-multiselect-chevron';
+    chevron.textContent = '⌄';
+    trigger.append(selections, chevron);
+    const panel = document.createElement('div');
+    panel.className = 'branch-multiselect-panel';
+    panel.setAttribute('role', 'listbox');
+    panel.setAttribute('aria-multiselectable', 'true');
+
+    const selectableOptions = Array.from(branchSelect.options).filter((option) => option.value && !option.disabled);
+    const render = () => {
+      selections.replaceChildren();
+      const selected = selectableOptions.filter((option) => option.selected);
+      if (!selected.length) {
+        const placeholder = document.createElement('span');
+        placeholder.className = 'branch-multiselect-placeholder';
+        placeholder.textContent = 'Seleccionar sucursales';
+        selections.append(placeholder);
+      } else {
+        selected.forEach((option) => {
+          const chip = document.createElement('span');
+          chip.className = 'branch-multiselect-chip';
+          chip.textContent = option.text;
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.setAttribute('aria-label', `Quitar ${option.text}`);
+          remove.textContent = '×';
+          remove.addEventListener('click', (event) => { event.stopPropagation(); option.selected = false; branchSelect.dispatchEvent(new Event('change')); });
+          chip.append(remove);
+          selections.append(chip);
+        });
+      }
+      panel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((checkbox) => { checkbox.checked = branchSelect.options[Number(checkbox.dataset.optionIndex)].selected; });
+    };
+
+    selectableOptions.forEach((option) => {
+      const label = document.createElement('label');
+      label.className = 'branch-multiselect-option';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.dataset.optionIndex = String(option.index);
+      checkbox.checked = option.selected;
+      checkbox.addEventListener('change', () => { option.selected = checkbox.checked; branchSelect.dispatchEvent(new Event('change')); });
+      const text = document.createElement('span');
+      text.textContent = option.text;
+      label.append(checkbox, text);
+      panel.append(label);
+    });
+    wrapper.append(caption, trigger, panel);
+    branchSelect.before(wrapper);
+    const toggle = () => { const open = wrapper.classList.toggle('open'); trigger.setAttribute('aria-expanded', String(open)); };
+    const closeOutside = (event: MouseEvent) => { if (!wrapper.contains(event.target as Node)) { wrapper.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); } };
+    trigger.addEventListener('click', toggle);
+    branchSelect.addEventListener('change', render);
+    document.addEventListener('click', closeOutside);
+    render();
+    return () => { document.removeEventListener('click', closeOutside); branchSelect.removeEventListener('change', render); wrapper.remove(); branchSelect.classList.remove('branch-multiselect-native'); branchSelect.name = 'branchId'; branchSelect.multiple = false; };
   }, [tab, data.branches]);
   function editUser(item: AdminData['users'][number]) {
     const form = document.querySelector<HTMLFormElement>('.admin-layout .admin-form');
@@ -838,6 +908,7 @@ function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, 
     const branchSelect = form.querySelector<HTMLSelectElement>('[name="branchIds"]')!;
     const assignedBranches = new Set(item.branches.map(({ branch }) => branch.id));
     Array.from(branchSelect.options).forEach((option) => { option.selected = assignedBranches.has(option.value); });
+    branchSelect.dispatchEvent(new Event('change'));
     form.querySelector('h2')!.textContent = 'Editar usuario';
     form.querySelector('button[type="submit"]')!.textContent = 'Guardar cambios';
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
