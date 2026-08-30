@@ -35,8 +35,11 @@ async function main() {
   });
 
   const permissions = [
+    ['products.read', 'Consultar productos'],
     ['products.manage', 'Gestionar productos'],
+    ['inventory.read', 'Consultar inventario'],
     ['sales.create', 'Registrar ventas'],
+    ['sales.read', 'Consultar ventas'],
     ['sales.negative_inventory', 'Vender con inventario negativo'],
     ['prices.change', 'Cambiar precios'],
     ['inventory.adjust', 'Ajustar inventario'],
@@ -46,7 +49,12 @@ async function main() {
     ['invoices.reprint', 'Reimprimir facturas'],
     ['cash.manage', 'Gestionar caja'],
     ['cash.withdrawals', 'Registrar retiros y gastos'],
+    ['reports.read', 'Consultar reportes'],
     ['reports.sensitive.read', 'Consultar reportes sensibles'],
+    ['customers.manage', 'Gestionar clientes'],
+    ['users.manage', 'Gestionar usuarios'],
+    ['roles.manage', 'Gestionar roles y permisos'],
+    ['audit.read', 'Consultar auditoría'],
     ['settings.manage', 'Gestionar configuración'],
   ];
   for (const [code, name] of permissions) {
@@ -76,7 +84,7 @@ async function main() {
     update: { name: 'Cajero' },
     create: { businessId: business.id, code: 'CASHIER', name: 'Cajero', system: true },
   });
-  const cashierPermissionCodes = ['sales.create', 'sales.discount', 'cash.manage', 'invoices.reprint'];
+  const cashierPermissionCodes = ['products.read', 'inventory.read', 'sales.create', 'sales.read', 'sales.discount', 'cash.manage', 'invoices.reprint', 'customers.manage'];
   const cashierPermissions = allPermissions.filter(({ code }) => cashierPermissionCodes.includes(code));
   for (const permission of cashierPermissions) {
     await prisma.rolePermission.upsert({
@@ -86,13 +94,14 @@ async function main() {
     });
   }
 
+  const seededAdminPasswordHash = await argon2.hash(rawPassword, { type: argon2.argon2id });
   const user = await prisma.user.upsert({
     where: { businessId_email: { businessId: business.id, email: 'admin@nexopos.local' } },
-    update: {},
+    update: { passwordHash: seededAdminPasswordHash, status: 'ACTIVE' },
     create: {
       businessId: business.id,
       email: 'admin@nexopos.local',
-      passwordHash: await argon2.hash(rawPassword, { type: argon2.argon2id }),
+      passwordHash: seededAdminPasswordHash,
       firstName: 'Administrador',
       lastName: 'NexoPOS',
     },

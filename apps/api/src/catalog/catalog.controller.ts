@@ -19,26 +19,32 @@ export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
 
   @Get('products')
+  @Permissions('products.read')
   products(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string, @Query('search') search?: string) {
     return this.catalog.listProducts(user, branchId, search);
   }
 
   @Get('categories')
+  @Permissions('products.read')
   categories(@CurrentUser() user: AuthenticatedUser) { return this.catalog.listCategories(user.businessId); }
 
   @Get('inventory-movements')
+  @Permissions('inventory.read')
   inventoryMovements(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.catalog.listInventoryMovements(user, branchId); }
 
   @Get('inventory-report')
+  @Permissions('reports.sensitive.read')
   inventoryReport(@CurrentUser() user: AuthenticatedUser, @Query() query: Record<string, string | undefined>) { return this.catalog.inventoryReport(user, query); }
 
   @Get('inventory-entries')
+  @Permissions('inventory.read')
   inventoryEntries(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.catalog.listInventoryEntries(user, branchId); }
 
   @Post('inventory-entries') @Permissions('inventory.adjust')
   createInventoryEntry(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateInventoryEntryDto) { return this.catalog.createInventoryEntry(user, dto); }
 
   @Get('inventory-counts')
+  @Permissions('inventory.read')
   inventoryCounts(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.catalog.listInventoryCounts(user, branchId); }
 
   @Post('inventory-counts') @Permissions('inventory.adjust')

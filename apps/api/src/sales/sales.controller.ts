@@ -15,11 +15,11 @@ import { SuspendSaleDto } from './dto/suspend-sale.dto';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SalesController {
   constructor(private readonly sales: SalesService) {}
-  @Get('setup') setup(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.sales.setup(user, branchId); }
-  @Get() list(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.sales.list(user, branchId); }
-  @Get('history') history(@CurrentUser() user: AuthenticatedUser, @Query() query: Record<string, string | undefined>) { return this.sales.history(user, query); }
-  @Get('products-report') productsReport(@CurrentUser() user: AuthenticatedUser, @Query() query: Record<string, string | undefined>) { return this.sales.productsReport(user, query); }
-  @Get('reports-dashboard') reportsDashboard(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string, @Query('days') days?: string) { return this.sales.reportsDashboard(user, branchId, days); }
+  @Get('setup') @Permissions('sales.create') setup(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.sales.setup(user, branchId); }
+  @Get() @Permissions('sales.read') list(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.sales.list(user, branchId); }
+  @Get('history') @Permissions('reports.read') history(@CurrentUser() user: AuthenticatedUser, @Query() query: Record<string, string | undefined>) { return this.sales.history(user, query); }
+  @Get('products-report') @Permissions('reports.sensitive.read') productsReport(@CurrentUser() user: AuthenticatedUser, @Query() query: Record<string, string | undefined>) { return this.sales.productsReport(user, query); }
+  @Get('reports-dashboard') @Permissions('reports.sensitive.read') reportsDashboard(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string, @Query('days') days?: string) { return this.sales.reportsDashboard(user, branchId, days); }
   @Post() @Permissions('sales.create') create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateSaleDto) { return this.sales.create(user, dto); }
   @Post(':invoiceId/void') @Permissions('sales.void') void(@CurrentUser() user: AuthenticatedUser, @Param('invoiceId') invoiceId: string, @Body() dto: VoidSaleDto) { return this.sales.void(user, invoiceId, dto); }
   @Post(':invoiceId/reprint') @Permissions('invoices.reprint') reprint(@CurrentUser() user: AuthenticatedUser, @Param('invoiceId') invoiceId: string) { return this.sales.reprint(user, invoiceId); }

@@ -15,7 +15,13 @@ La documentación funcional y de datos está en [`docs/arquitectura.md`](docs/ar
 
 ## Estado
 
-Fundación en desarrollo: API, Prisma, identidad y RBAC iniciales están implementados.
+La versión piloto incluye autenticación y RBAC, administración del negocio,
+catálogo e inventario, ventas multimoneda, pagos mixtos, caja, anulaciones,
+devoluciones, impresión térmica, auditoría y reportes exportables.
+
+La validación automatizada actual comprende 28 pruebas del API y 8 pruebas E2E
+en Chromium. Consulta [la guía operativa](docs/operacion.md) para los flujos de
+trabajo y el procedimiento de liberación.
 
 ## Ejecutar localmente (Windows / VS Code)
 
@@ -28,7 +34,7 @@ docker compose up -d
 pnpm install
 pnpm --filter @nexopos/api db:generate
 pnpm --filter @nexopos/api db:migrate -- --name initial_schema
-$env:SEED_ADMIN_PASSWORD = "una-clave-local-de-al-menos-12-caracteres"
+$env:SEED_ADMIN_PASSWORD = "define-una-clave-local-segura"
 pnpm --filter @nexopos/api db:seed
 pnpm dev
 ```
@@ -43,6 +49,25 @@ Abre `http://localhost:3000` para la interfaz y `http://localhost:3001/api/v1/he
 
 Las rutas protegidas pueden usar `JwtAuthGuard` y combinar `@Roles(...)` o `@Permissions(...)` con `PermissionsGuard`. Los permisos se consultan desde Prisma en cada request, de modo que los cambios de estado, roles o sucursales tienen efecto sin esperar a que expire el JWT.
 
-## Próximo paso
+## Validación
 
-Tras confirmar las decisiones críticas indicadas en la documentación, se instalarán las dependencias y se implementará el módulo de identidad, permisos y configuración inicial.
+```powershell
+pnpm lint
+pnpm test
+pnpm build
+pnpm exec playwright install chromium
+$env:E2E_ADMIN_EMAIL = "admin@nexopos.local"
+$env:E2E_ADMIN_PASSWORD = "la-clave-local-del-administrador"
+pnpm test:e2e
+```
+
+Las pruebas E2E modifican únicamente la base local de desarrollo de forma
+controlada. No deben ejecutarse contra producción.
+
+## Antes de producción
+
+- Reemplazar los secretos locales por valores únicos administrados fuera del repositorio.
+- Configurar HTTPS, dominio, CORS definitivo y limitación de solicitudes.
+- Automatizar respaldos y probar la restauración de PostgreSQL.
+- Centralizar logs y monitorear disponibilidad, errores y almacenamiento.
+- Completar una prueba de aceptación con usuarios y dispositivos reales.

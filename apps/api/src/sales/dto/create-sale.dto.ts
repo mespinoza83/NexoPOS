@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { CardType } from '@prisma/client';
-import { ArrayMinSize, IsArray, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Max, Min, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsEnum, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, Min, MinLength, ValidateNested } from 'class-validator';
 
 class SaleItemDto {
   @IsUUID() productId!: string;
@@ -22,6 +22,7 @@ class SalePaymentDto {
 
 export class CreateSaleDto {
   @IsUUID() branchId!: string;
+  @IsOptional() @IsIn(['NIO', 'USD']) currency?: 'NIO' | 'USD';
   @IsOptional() @IsUUID() idempotencyKey?: string;
   @IsOptional() @IsUUID() customerId?: string;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => SaleItemDto) items!: SaleItemDto[];

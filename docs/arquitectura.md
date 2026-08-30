@@ -4,13 +4,25 @@
 
 NexoPOS es un POS web multi-sucursal para ventas de contado, inventario, cajas, pagos mixtos, devoluciones y auditoría. La primera versión no habilita crédito ni cuentas por cobrar, pero conserva la relación opcional de cliente en las ventas.
 
+## Estado de la versión piloto
+
+Las fases funcionales 1 a 5 están implementadas para operación local: identidad,
+RBAC, administración, catálogo, inventario, POS, caja, correcciones controladas,
+auditoría y reportes. La validación incluye pruebas unitarias/de servicios y
+pruebas E2E de autenticación, permisos, caja, pagos mixtos, anulaciones y
+devoluciones.
+
+La publicación en producción permanece separada del alcance funcional y requiere
+endurecimiento de secretos, HTTPS, limitación de solicitudes, monitoreo,
+respaldos automatizados y una prueba de aceptación operativa.
+
 ## Arquitectura recomendada
 
 Monorepo `pnpm` con TypeScript de extremo a extremo:
 
 | Capa | Tecnología | Responsabilidad |
 | --- | --- | --- |
-| Web | Next.js, React, Tailwind CSS | POS, administración y reportes responsive |
+| Web | Next.js, React, TypeScript y CSS | POS, administración y reportes responsive |
 | API | NestJS, REST/OpenAPI, class-validator | reglas de negocio, autorización y transacciones |
 | Datos | PostgreSQL + Prisma ORM | integridad, migraciones y consultas |
 | Operación | Docker Compose | PostgreSQL, Redis y ejecución local reproducible |
@@ -96,11 +108,12 @@ La API es el único componente que accede a la base de datos. Las operaciones qu
 
 ## Fases priorizadas
 
-1. **Fundación:** monorepo, PostgreSQL, migraciones, identidad, RBAC, auditoría y configuración del negocio.
-2. **Catálogo e inventario:** productos, categorías, existencias por sucursal, movimientos y alertas.
-3. **POS y caja:** facturas, descuentos, impuestos, pagos mixtos, sesiones de caja e impresión térmica.
-4. **Correcciones controladas:** anulaciones, devoluciones, reversos y trazabilidad completa.
-5. **Información y operación:** reportes, exportación, monitoreo, copias de seguridad y despliegue.
+1. **Fundación — implementada:** monorepo, PostgreSQL, migraciones, identidad, RBAC, auditoría y configuración.
+2. **Catálogo e inventario — implementada:** productos, categorías, existencias, movimientos, conteos y alertas.
+3. **POS y caja — implementada:** facturas, descuentos, impuestos, pagos mixtos, sesiones e impresión térmica.
+4. **Correcciones controladas — implementada:** anulaciones, devoluciones, reversos y trazabilidad.
+5. **Información — implementada:** reportes y exportación CSV/PDF imprimible.
+6. **Operación productiva — pendiente:** monitoreo, copias de seguridad, endurecimiento y despliegue.
 
 ## Decisiones que deben confirmarse antes de los módulos afectados
 

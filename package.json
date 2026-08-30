@@ -7,6 +7,11 @@
     "dev": "pnpm --parallel --filter @nexopos/web --filter @nexopos/api dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.51.1"
   }
 }
