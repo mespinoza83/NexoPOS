@@ -288,9 +288,9 @@ export class AdminService {
       const role = await this.prisma.role.findFirst({ where: { id: dto.roleId, businessId } });
       if (!role) throw new NotFoundException('Rol no disponible.');
     }
-    if (dto.branchId) {
-      const branch = await this.prisma.branch.findFirst({ where: { id: dto.branchId, businessId, active: true } });
-      if (!branch) throw new NotFoundException('Sucursal no disponible.');
+    if (dto.branchIds) {
+      const branches = await this.prisma.branch.findMany({ where: { id: { in: dto.branchIds }, businessId, active: true } });
+      if (branches.length !== dto.branchIds.length) throw new NotFoundException('Una o más sucursales no están disponibles.');
     }
     try {
       await this.prisma.$transaction(async (transaction) => {
@@ -299,9 +299,9 @@ export class AdminService {
           await transaction.userRole.deleteMany({ where: { userId } });
           await transaction.userRole.create({ data: { userId, roleId: dto.roleId } });
         }
-        if (dto.branchId) {
+        if (dto.branchIds) {
           await transaction.userBranch.deleteMany({ where: { userId } });
-          await transaction.userBranch.create({ data: { userId, branchId: dto.branchId } });
+          await transaction.userBranch.createMany({ data: dto.branchIds.map((branchId) => ({ userId, branchId })) });
         }
       });
       return this.overview(businessId);

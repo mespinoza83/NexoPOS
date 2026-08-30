@@ -22,8 +22,13 @@ type AuthUser = {
 };
 
 function rememberAuthenticatedUser(user: AuthUser) {
-  if (typeof window !== 'undefined') window.sessionStorage.setItem('nexopos.permissions', JSON.stringify(user.permissions ?? []));
-  return user;
+  if (typeof window === 'undefined') return user;
+  window.sessionStorage.setItem('nexopos.permissions', JSON.stringify(user.permissions ?? []));
+  const storageKey = `nexopos.activeBranch.${user.businessId ?? user.id ?? 'user'}`;
+  const rememberedBranchId = window.localStorage.getItem(storageKey);
+  const selected = user.branches.find((branch) => branch.id === rememberedBranchId) ?? user.branches[0];
+  if (selected) window.localStorage.setItem(storageKey, selected.id);
+  return { ...user, branches: selected ? [selected, ...user.branches.filter((branch) => branch.id !== selected.id)] : user.branches };
 }
 
 type CatalogProduct = {
@@ -147,6 +152,24 @@ export default function HomePage() {
     return () => { window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
   }, [user]);
 
+  useEffect(() => {
+    if (!user || user.branches.length < 2) return;
+    const chooseBranch = async (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('.branch-selector')) return;
+      const result = await Swal.fire({ title: 'Cambiar sucursal', input: 'select', inputOptions: Object.fromEntries(user.branches.map((branch) => [branch.id, `${branch.code ? `${branch.code} · ` : ''}${branch.name}`])), inputValue: user.branches[0]?.id, showCancelButton: true, confirmButtonText: 'Cambiar', cancelButtonText: 'Cancelar' });
+      if (!result.isConfirmed || !result.value || result.value === user.branches[0]?.id) return;
+      const selected = user.branches.find((branch) => branch.id === result.value);
+      if (!selected) return;
+      window.localStorage.setItem(`nexopos.activeBranch.${user.businessId ?? user.id ?? 'user'}`, selected.id);
+      setUser({ ...user, branches: [selected, ...user.branches.filter((branch) => branch.id !== selected.id)] });
+      setActiveView('dashboard');
+      setProducts([]); setInventoryMovements([]); setInventoryEntries([]); setInventoryCounts([]); setSalesSetup(null); setSalesHistory([]); setCashData(null);
+      await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Sucursal activa: ${selected.name}`, showConfirmButton: false, timer: 1800 });
+    };
+    document.addEventListener('click', chooseBranch);
+    return () => document.removeEventListener('click', chooseBranch);
+  }, [user]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
@@ -187,11 +210,11 @@ export default function HomePage() {
     setCatalogLoading(true);
     try {
       const [productsResponse, categoriesResponse, movementsResponse, entriesResponse, countsResponse] = await Promise.all([
-        authenticatedFetch(`${apiUrl}/catalog/products`),
+        authenticatedFetch(`${apiUrl}/catalog/products?branchId=${user?.branches[0]?.id ?? ''}`),
         authenticatedFetch(`${apiUrl}/catalog/categories`),
-        authenticatedFetch(`${apiUrl}/catalog/inventory-movements`),
-        authenticatedFetch(`${apiUrl}/catalog/inventory-entries`),
-        authenticatedFetch(`${apiUrl}/catalog/inventory-counts`),
+        authenticatedFetch(`${apiUrl}/catalog/inventory-movements?branchId=${user?.branches[0]?.id ?? ''}`),
+        authenticatedFetch(`${apiUrl}/catalog/inventory-entries?branchId=${user?.branches[0]?.id ?? ''}`),
+        authenticatedFetch(`${apiUrl}/catalog/inventory-counts?branchId=${user?.branches[0]?.id ?? ''}`),
       ]);
       if (productsResponse.ok) setProducts((await productsResponse.json()) as CatalogProduct[]);
       if (categoriesResponse.ok) setCategories((await categoriesResponse.json()) as CatalogCategory[]);
@@ -240,7 +263,8 @@ export default function HomePage() {
   async function openSales() {
     setActiveView('sales'); setSalesLoading(true);
     try {
-      const [productsResponse, setupResponse, historyResponse] = await Promise.all([authenticatedFetch(`${apiUrl}/catalog/products`), authenticatedFetch(`${apiUrl}/sales/setup`), authenticatedFetch(`${apiUrl}/sales`)]);
+      const branchId = user?.branches[0]?.id ?? '';
+      const [productsResponse, setupResponse, historyResponse] = await Promise.all([authenticatedFetch(`${apiUrl}/catalog/products?branchId=${branchId}`), authenticatedFetch(`${apiUrl}/sales/setup?branchId=${branchId}`), authenticatedFetch(`${apiUrl}/sales?branchId=${branchId}`)]);
       if (productsResponse.ok) setProducts((await productsResponse.json()) as CatalogProduct[]);
       if (setupResponse.ok) setSalesSetup((await setupResponse.json()) as SalesSetup);
       if (historyResponse.ok) setSalesHistory((await historyResponse.json()) as SalesInvoice[]);
@@ -249,7 +273,7 @@ export default function HomePage() {
 
   async function openCash() {
     setActiveView('cash'); setCashLoading(true);
-    try { const response = await authenticatedFetch(`${apiUrl}/cash`); const result = await response.json().catch(() => ({})) as CashData & { message?: string }; if (!response.ok) throw new Error(result.message ?? 'No se pudo cargar Caja.'); setCashData(result); }
+    try { const response = await authenticatedFetch(`${apiUrl}/cash?branchId=${user?.branches[0]?.id ?? ''}`); const result = await response.json().catch(() => ({})) as CashData & { message?: string }; if (!response.ok) throw new Error(result.message ?? 'No se pudo cargar Caja.'); setCashData(result); }
     catch (requestError) { await Swal.fire({ icon: 'error', title: 'No se pudo abrir Caja', text: requestError instanceof Error ? requestError.message : 'Error inesperado.' }); setActiveView('dashboard'); }
     finally { setCashLoading(false); }
   }
@@ -792,6 +816,16 @@ function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, 
   const [message, setMessage] = useState('');
   const [creatingUser, setCreatingUser] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  useEffect(() => {
+    if (tab !== 'users') return;
+    const branchSelect = document.querySelector<HTMLSelectElement>('.admin-layout .admin-form [name="branchId"]');
+    if (!branchSelect) return;
+    branchSelect.name = 'branchIds';
+    branchSelect.multiple = true;
+    branchSelect.size = Math.min(4, Math.max(2, data.branches.filter((branch) => branch.active).length));
+    branchSelect.setAttribute('aria-label', 'Sucursales autorizadas');
+    if (branchSelect.options[0]?.value === '') { branchSelect.options[0].text = 'Seleccione una o varias sucursales'; branchSelect.options[0].disabled = true; }
+  }, [tab, data.branches]);
   function editUser(item: AdminData['users'][number]) {
     const form = document.querySelector<HTMLFormElement>('.admin-layout .admin-form');
     if (!form) return;
@@ -801,7 +835,9 @@ function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, 
     form.querySelector<HTMLInputElement>('[name="email"]')!.value = item.email;
     form.querySelector<HTMLInputElement>('[name="password"]')!.value = '';
     form.querySelector<HTMLSelectElement>('[name="roleId"]')!.value = item.roles[0]?.role.id ?? '';
-    form.querySelector<HTMLSelectElement>('[name="branchId"]')!.value = item.branches[0]?.branch.id ?? '';
+    const branchSelect = form.querySelector<HTMLSelectElement>('[name="branchIds"]')!;
+    const assignedBranches = new Set(item.branches.map(({ branch }) => branch.id));
+    Array.from(branchSelect.options).forEach((option) => { option.selected = assignedBranches.has(option.value); });
     form.querySelector('h2')!.textContent = 'Editar usuario';
     form.querySelector('button[type="submit"]')!.textContent = 'Guardar cambios';
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -870,8 +906,11 @@ function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, 
     setCreatingUser(true);
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const editingSelf = editingUserId === user.id;
     try {
-      const body = { email: form.get('email'), firstName: form.get('firstName'), lastName: form.get('lastName'), ...(form.get('password') ? { password: form.get('password') } : {}), ...(editingUserId ? { roleId: form.get('roleId'), branchId: form.get('branchId') } : { password: form.get('password'), roleIds: [form.get('roleId')], branchIds: [form.get('branchId')] }) };
+      const branchIds = form.getAll('branchIds').map(String).filter(Boolean);
+      if (!branchIds.length) throw new Error('Selecciona al menos una sucursal.');
+      const body = { email: form.get('email'), firstName: form.get('firstName'), lastName: form.get('lastName'), ...(form.get('password') ? { password: form.get('password') } : {}), branchIds, ...(editingUserId ? { roleId: form.get('roleId') } : { password: form.get('password'), roleIds: [form.get('roleId')] }) };
       const response = await authenticatedFetch(editingUserId ? `${apiUrl}/admin/users/${editingUserId}` : `${apiUrl}/admin/users`, { method: editingUserId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const result = (await response.json().catch(() => ({}))) as { message?: string | string[] };
       if (!response.ok) {
@@ -884,6 +923,7 @@ function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, 
       formElement.querySelector('button[type="submit"]')!.textContent = '＋ Crear usuario';
       setMessage('Usuario creado correctamente.');
       await Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Usuario guardado', text: 'Ya aparece en la tabla.', showConfirmButton: false, timer: 2800, timerProgressBar: true });
+      if (editingSelf) { window.location.reload(); return; }
       await onRefresh();
     } catch (requestError) {
       await Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: 'No se pudo guardar', text: requestError instanceof Error ? requestError.message : 'Ocurrió un error inesperado.', showConfirmButton: false, timer: 4500, timerProgressBar: true });

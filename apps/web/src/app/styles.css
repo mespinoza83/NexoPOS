@@ -327,3 +327,9 @@ body .swal2-toast {
   body .swal2-popup:not(.swal2-toast) { padding: 1rem; }
   body .swal2-title { font-size: 1.45rem; }
 }
+
+.branch-selector { cursor: pointer; transition: border-color .18s ease, box-shadow .18s ease; }
+.branch-selector:hover { border-color: var(--teal); box-shadow: 0 0 0 3px rgb(22 125 134 / 9%); }
+.admin-form select[multiple] { min-height: 5.5rem; padding: .35rem; }
+.admin-form select[multiple] option { border-radius: 3px; padding: .5rem .55rem; }
+.admin-form select[multiple] option:checked { background: linear-gradient(var(--teal), var(--teal)); color: #fff; }

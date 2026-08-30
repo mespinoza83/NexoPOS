@@ -8,7 +8,11 @@ describe('AdminService banks', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
-    branch: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn(), count: jest.fn() },
+    branch: { create: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), count: jest.fn() },
+    user: { findFirst: jest.fn(), update: jest.fn() },
+    userBranch: { deleteMany: jest.fn(), createMany: jest.fn() },
+    userRole: { deleteMany: jest.fn(), create: jest.fn() },
+    role: { findFirst: jest.fn() },
     cashRegister: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     invoiceSequence: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     cashSession: { count: jest.fn(), findFirst: jest.fn() },
@@ -131,5 +135,18 @@ describe('AdminService banks', () => {
 
     await expect(service.updateInvoiceSequence('business-id', 'sequence-id', { next: 24 })).rejects.toThrow('El próximo número no puede ser menor que 25.');
     expect(prisma.invoiceSequence.update).not.toHaveBeenCalled();
+  });
+
+  it('replaces all authorized branches when updating a user', async () => {
+    prisma.user.findFirst.mockResolvedValue({ id: 'user-id' });
+    prisma.branch.findMany.mockResolvedValue([{ id: 'branch-1' }, { id: 'branch-2' }]);
+    prisma.$transaction.mockImplementation(async (callback: (transaction: typeof prisma) => unknown) => callback(prisma));
+    const service = new AdminService(prisma as never);
+    jest.spyOn(service, 'overview').mockResolvedValue({ users: [] } as never);
+
+    await service.updateUser('business-id', 'user-id', { branchIds: ['branch-1', 'branch-2'] });
+
+    expect(prisma.userBranch.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-id' } });
+    expect(prisma.userBranch.createMany).toHaveBeenCalledWith({ data: [{ userId: 'user-id', branchId: 'branch-1' }, { userId: 'user-id', branchId: 'branch-2' }] });
   });
 });
