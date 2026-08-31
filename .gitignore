@@ -10,3 +10,7 @@ test-results/
 .env.local
 !.env.example
 *.log
+deployment/windows/package/
+deployment/windows/dist/
+deployment/windows/test-api/
+deployment/windows/vendor/

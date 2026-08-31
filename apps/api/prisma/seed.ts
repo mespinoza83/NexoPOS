@@ -5,6 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const rawPassword = process.env.SEED_ADMIN_PASSWORD;
+  const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? 'admin@nexopos.local').trim().toLowerCase();
   if (!rawPassword || rawPassword.length < 12) {
     throw new Error('SEED_ADMIN_PASSWORD debe tener al menos 12 caracteres.');
   }
@@ -96,11 +97,11 @@ async function main() {
 
   const seededAdminPasswordHash = await argon2.hash(rawPassword, { type: argon2.argon2id });
   const user = await prisma.user.upsert({
-    where: { businessId_email: { businessId: business.id, email: 'admin@nexopos.local' } },
+    where: { businessId_email: { businessId: business.id, email: adminEmail } },
     update: { passwordHash: seededAdminPasswordHash, status: 'ACTIVE' },
     create: {
       businessId: business.id,
-      email: 'admin@nexopos.local',
+      email: adminEmail,
       passwordHash: seededAdminPasswordHash,
       firstName: 'Administrador',
       lastName: 'NexoPOS',

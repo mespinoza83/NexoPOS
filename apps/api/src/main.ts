@@ -2,8 +2,10 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser = require('cookie-parser');
 import { AppModule } from './app.module';
+import { assertInstallationLicense } from './license/installation-license';
 
 async function bootstrap() {
+  assertInstallationLicense();
   const app = await NestFactory.create(AppModule);
   app.use(cookieParser());
   app.setGlobalPrefix('api/v1');
