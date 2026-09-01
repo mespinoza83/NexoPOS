@@ -18,6 +18,22 @@ enum ProductStatus {
   INACTIVE
 }
 
+enum UnitOfMeasure {
+  UNIT
+  GRAM
+  KILOGRAM
+  POUND
+  OUNCE
+  MILLILITER
+  LITER
+  FLUID_OUNCE
+  METER
+  CENTIMETER
+  DOZEN
+  BOX
+  PACKAGE
+}
+
 enum InvoiceStatus {
   DRAFT
   PAID
@@ -240,6 +256,11 @@ model Product {
   taxExempt          Boolean       @default(false)
   status             ProductStatus @default(ACTIVE)
   availableForSale   Boolean       @default(true)
+  inventoryUnit      UnitOfMeasure @default(UNIT)
+  saleUnit           UnitOfMeasure @default(UNIT)
+  saleUnitFactor     Decimal       @default(1) @db.Decimal(14, 6)
+  allowFractionalSale Boolean      @default(false)
+  presentation       String?
   imageUrl           String?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -499,6 +520,8 @@ model InvoiceItem {
   invoiceId        String    @db.Uuid
   productId        String    @db.Uuid
   quantity         Decimal   @db.Decimal(14, 3)
+  saleUnit         UnitOfMeasure @default(UNIT)
+  saleUnitFactor   Decimal   @default(1) @db.Decimal(14, 6)
   unitPrice        Decimal   @db.Decimal(14, 2)
   unitCost         Decimal   @db.Decimal(14, 2)
   discountPercent  Decimal   @default(0) @db.Decimal(5, 2)

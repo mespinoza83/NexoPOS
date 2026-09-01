@@ -9,6 +9,7 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { SuspendSaleDto } from './dto/suspend-sale.dto';
 import { currencyFactor, roundMoney, toBaseCurrency } from './currency';
 import { cashPaymentTotal } from './cash-payments';
+import { inventoryQuantityForSale, isValidSaleQuantity } from './units';
 
 const money = roundMoney;
 
@@ -162,14 +163,17 @@ export class SalesService {
         const product = productMap.get(item.productId)!;
         if (product.status !== 'ACTIVE' || !product.availableForSale) throw new BadRequestException(`${product.name} no está disponible para venta.`);
         const stock = Number(product.inventory[0]?.quantity ?? 0);
-        if (stock < item.quantity && !user.permissions.includes('sales.negative_inventory')) throw new BadRequestException(`Existencia insuficiente para ${product.name}. Disponible: ${stock.toFixed(3)}.`);
+        if (!isValidSaleQuantity(item.quantity, product.allowFractionalSale)) throw new BadRequestException(`${product.name} sólo se vende en cantidades enteras.`);
+        const saleUnitFactor = Number(product.saleUnitFactor);
+        const stockQuantity = inventoryQuantityForSale(item.quantity, saleUnitFactor);
+        if (stock < stockQuantity && !user.permissions.includes('sales.negative_inventory')) throw new BadRequestException(`Existencia insuficiente para ${product.name}. Disponible: ${stock.toFixed(3)} ${product.inventoryUnit}.`);
         const configuredPrice = money(Number(product.salePrice) * conversionFactor);
         if (item.unitPrice !== undefined && money(item.unitPrice) !== configuredPrice && !user.permissions.includes('prices.change')) throw new ForbiddenException(`No tiene permiso para cambiar el precio de ${product.name}.`);
         const unitPrice = item.unitPrice ?? configuredPrice;
         const base = money(unitPrice * item.quantity);
         const discountPercent = item.discountPercent ?? 0;
         const itemDiscount = money(base * discountPercent / 100);
-        return { item, product, stock, unitPrice, base, discountPercent, itemDiscount, netBeforeInvoiceDiscount: base - itemDiscount };
+        return { item, product, stock, stockQuantity, saleUnitFactor, unitPrice, base, discountPercent, itemDiscount, netBeforeInvoiceDiscount: base - itemDiscount };
       });
       const subtotal = money(prepared.reduce((sum, line) => sum + line.base, 0));
       const itemDiscountTotal = money(prepared.reduce((sum, line) => sum + line.itemDiscount, 0));
@@ -215,11 +219,11 @@ export class SalesService {
         const taxable = line.netBeforeInvoiceDiscount - allocatedInvoiceDiscount;
         const taxRate = business.taxesEnabled && !line.product.taxExempt ? (Number(line.product.taxRate) || Number(business.ivaRate)) : 0;
         const taxAmount = money(taxable * taxRate / 100);
-        const invoiceItem = await tx.invoiceItem.create({ data: { invoiceId: invoice.id, productId: line.product.id, quantity: line.item.quantity, unitPrice: line.unitPrice, unitCost: money(Number(line.product.purchasePrice) * conversionFactor), discountPercent: line.discountPercent, discountAmount: line.itemDiscount, taxRate, taxAmount, lineTotal: money(taxable + taxAmount) } });
+        const invoiceItem = await tx.invoiceItem.create({ data: { invoiceId: invoice.id, productId: line.product.id, quantity: line.item.quantity, saleUnit: line.product.saleUnit, saleUnitFactor: line.saleUnitFactor, unitPrice: line.unitPrice, unitCost: money(Number(line.product.purchasePrice) * line.saleUnitFactor * conversionFactor), discountPercent: line.discountPercent, discountAmount: line.itemDiscount, taxRate, taxAmount, lineTotal: money(taxable + taxAmount) } });
         if (line.itemDiscount > 0) await tx.invoiceDiscount.create({ data: { invoiceId: invoice.id, invoiceItemId: invoiceItem.id, scope: 'ITEM', percent: line.discountPercent, amount: line.itemDiscount, reason: line.item.discountReason!.trim(), appliedById: user.id } });
-        const resulting = line.stock - line.item.quantity;
+        const resulting = line.stock - line.stockQuantity;
         await tx.branchInventory.upsert({ where: { branchId_productId: { branchId, productId: line.product.id } }, create: { branchId, productId: line.product.id, quantity: resulting, minimumQuantity: 0 }, update: { quantity: resulting } });
-        await tx.inventoryMovement.create({ data: { branchId, productId: line.product.id, type: 'SALE', quantity: line.item.quantity, previousQuantity: line.stock, resultingQuantity: resulting, referenceType: 'Invoice', referenceId: invoice.id, reason: `Venta ${number}`, createdById: user.id } });
+        await tx.inventoryMovement.create({ data: { branchId, productId: line.product.id, type: 'SALE', quantity: line.stockQuantity, previousQuantity: line.stock, resultingQuantity: resulting, referenceType: 'Invoice', referenceId: invoice.id, reason: `Venta ${number}`, createdById: user.id } });
       }
       if (invoiceDiscount > 0) await tx.invoiceDiscount.create({ data: { invoiceId: invoice.id, scope: 'INVOICE', percent: invoiceDiscountPercent, amount: invoiceDiscount, reason: dto.discountReason!.trim(), appliedById: user.id } });
       for (const payment of dto.payments) await tx.invoicePayment.create({ data: { invoiceId: invoice.id, paymentMethodId: payment.paymentMethodId, bankId: payment.bankId, posTerminalId: payment.posTerminalId, amount: payment.amount, cardType: payment.cardType, reference: payment.reference?.trim() || null, notes: payment.notes?.trim() || null, receivedById: user.id } });
@@ -257,9 +261,10 @@ export class SalesService {
         await tx.returnItem.create({ data: { returnId: returnDoc.id, invoiceItemId: sold.id, productId: sold.productId, quantity: requested.quantity } });
         const inventory = await tx.branchInventory.findUnique({ where: { branchId_productId: { branchId: invoice.branchId, productId: sold.productId } } });
         const previous = Number(inventory?.quantity ?? 0);
-        const resulting = previous + requested.quantity;
+        const returnedStockQuantity = requested.quantity * Number(sold.saleUnitFactor);
+        const resulting = previous + returnedStockQuantity;
         await tx.branchInventory.upsert({ where: { branchId_productId: { branchId: invoice.branchId, productId: sold.productId } }, create: { branchId: invoice.branchId, productId: sold.productId, quantity: resulting, minimumQuantity: 0 }, update: { quantity: resulting } });
-        await tx.inventoryMovement.create({ data: { branchId: invoice.branchId, productId: sold.productId, type: 'RETURN', quantity: requested.quantity, previousQuantity: previous, resultingQuantity: resulting, referenceType: 'Return', referenceId: returnDoc.id, reason: dto.reason.trim(), createdById: user.id } });
+        await tx.inventoryMovement.create({ data: { branchId: invoice.branchId, productId: sold.productId, type: 'RETURN', quantity: returnedStockQuantity, previousQuantity: previous, resultingQuantity: resulting, referenceType: 'Return', referenceId: returnDoc.id, reason: dto.reason.trim(), createdById: user.id } });
       }
       for (const refund of dto.refunds) await tx.returnRefund.create({ data: { returnId: returnDoc.id, paymentMethodId: refund.paymentMethodId, amount: refund.amount, bankId: refund.bankId, posTerminalId: refund.posTerminalId, reference: refund.reference?.trim() || null } });
       const cashRefund = cashPaymentTotal(dto.refunds.map((refund) => ({ amount: refund.amount, kind: methodMap.get(refund.paymentMethodId)!.kind })));
@@ -279,7 +284,7 @@ export class SalesService {
       const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, branch: { businessId: user.businessId } }, include: { branch: { select: { business: { select: { defaultCurrency: true, exchangeRate: true } } } }, items: true, payments: { include: { paymentMethod: true } } } });
       if (!invoice) throw new NotFoundException('Factura no encontrada.');
       if (invoice.status !== 'PAID') throw new BadRequestException('Sólo se pueden anular facturas pagadas.');
-      for (const item of invoice.items) { const inventory = await tx.branchInventory.findUnique({ where: { branchId_productId: { branchId: invoice.branchId, productId: item.productId } } }); const previous = Number(inventory?.quantity ?? 0); const resulting = previous + Number(item.quantity); await tx.branchInventory.upsert({ where: { branchId_productId: { branchId: invoice.branchId, productId: item.productId } }, create: { branchId: invoice.branchId, productId: item.productId, quantity: resulting, minimumQuantity: 0 }, update: { quantity: resulting } }); await tx.inventoryMovement.create({ data: { branchId: invoice.branchId, productId: item.productId, type: 'SALE_VOID', quantity: item.quantity, previousQuantity: previous, resultingQuantity: resulting, referenceType: 'Invoice', referenceId: invoice.id, reason: dto.reason.trim(), createdById: user.id } }); }
+      for (const item of invoice.items) { const inventory = await tx.branchInventory.findUnique({ where: { branchId_productId: { branchId: invoice.branchId, productId: item.productId } } }); const previous = Number(inventory?.quantity ?? 0); const restoredQuantity = Number(item.quantity) * Number(item.saleUnitFactor); const resulting = previous + restoredQuantity; await tx.branchInventory.upsert({ where: { branchId_productId: { branchId: invoice.branchId, productId: item.productId } }, create: { branchId: invoice.branchId, productId: item.productId, quantity: resulting, minimumQuantity: 0 }, update: { quantity: resulting } }); await tx.inventoryMovement.create({ data: { branchId: invoice.branchId, productId: item.productId, type: 'SALE_VOID', quantity: restoredQuantity, previousQuantity: previous, resultingQuantity: resulting, referenceType: 'Invoice', referenceId: invoice.id, reason: dto.reason.trim(), createdById: user.id } }); }
       const updated = await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'VOIDED', voidReason: dto.reason.trim(), voidedAt: new Date() } });
       const cashReceived = money(cashPaymentTotal(invoice.payments.map((payment) => ({ amount: Number(payment.amount), kind: payment.paymentMethod.kind }))) - Number(invoice.changeAmount));
       if (invoice.cashSessionId && cashReceived > 0) await tx.cashMovement.create({ data: { cashSessionId: invoice.cashSessionId, type: 'RETURN_CASH', amount: toBaseCurrency(cashReceived, invoice.currency, invoice.branch.business.defaultCurrency, Number(invoice.exchangeRate) || Number(invoice.branch.business.exchangeRate)), referenceType: 'Invoice', referenceId: invoice.id, reason: dto.reason.trim(), createdById: user.id } });
