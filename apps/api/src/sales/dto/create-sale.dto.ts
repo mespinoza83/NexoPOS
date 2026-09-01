@@ -4,7 +4,7 @@ import { ArrayMinSize, IsArray, IsEnum, IsIn, IsNumber, IsOptional, IsString, Is
 
 class SaleItemDto {
   @IsUUID() productId!: string;
-  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.001) quantity!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) quantity!: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) unitPrice?: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) discountPercent?: number;
   @IsOptional() @IsString() discountReason?: string;

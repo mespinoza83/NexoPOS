@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { AuthService } from '../auth/auth.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -24,6 +24,7 @@ import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
 import { UpdateCashRegisterDto } from './dto/update-cash-register.dto';
 import { UpdateInvoiceSequenceDto } from './dto/update-invoice-sequence.dto';
 import { UpdateMeasurementUnitDto } from './dto/update-measurement-unit.dto';
+import { CreateMeasurementUnitDto } from './dto/create-measurement-unit.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -65,6 +66,14 @@ export class AdminController {
   @Patch('measurement-units/:unitId')
   @Permissions('settings.manage')
   updateMeasurementUnit(@CurrentUser() user: AuthenticatedUser, @Param('unitId') unitId: string, @Body() dto: UpdateMeasurementUnitDto) { return this.admin.updateMeasurementUnit(user.businessId, unitId, dto); }
+
+  @Post('measurement-units')
+  @Permissions('settings.manage')
+  createMeasurementUnit(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateMeasurementUnitDto) { return this.admin.createMeasurementUnit(user.businessId, dto); }
+
+  @Delete('measurement-units/:unitId')
+  @Permissions('settings.manage')
+  deleteMeasurementUnit(@CurrentUser() user: AuthenticatedUser, @Param('unitId') unitId: string) { return this.admin.deleteMeasurementUnit(user.businessId, unitId); }
 
   @Post('pos-terminals')
   @Permissions('settings.manage')

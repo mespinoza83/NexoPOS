@@ -145,6 +145,7 @@ export class CatalogService {
   async createProduct(user: AuthenticatedUser, dto: CreateProductDto) {
     const branchId = this.authorizedBranch(user, dto.branchId);
     await this.requireCategory(user.businessId, dto.categoryId);
+    await this.requireMeasurementUnits(user.businessId, [dto.inventoryUnit ?? 'UNIT', dto.saleUnit ?? dto.inventoryUnit ?? 'UNIT']);
     if (dto.manualSalePrice && dto.salePrice !== undefined && !user.permissions.includes('prices.change')) throw new ForbiddenException('No tiene permiso para cambiar precios manualmente.');
     const salePrice = dto.manualSalePrice && dto.salePrice !== undefined ? dto.salePrice : this.calculatedPrice(dto.purchasePrice, dto.profitMargin);
     try {
@@ -162,6 +163,7 @@ export class CatalogService {
     const current = await this.prisma.product.findFirst({ where: { id: productId, businessId: user.businessId } });
     if (!current) throw new NotFoundException('Producto no encontrado.');
     if (dto.categoryId) await this.requireCategory(user.businessId, dto.categoryId);
+    await this.requireMeasurementUnits(user.businessId, [dto.inventoryUnit ?? current.inventoryUnit, dto.saleUnit ?? current.saleUnit]);
     if (dto.inventoryUnit && dto.inventoryUnit !== current.inventoryUnit) {
       const inventoryWithStock = await this.prisma.branchInventory.findFirst({ where: { productId, quantity: { not: 0 } }, select: { branchId: true } });
       if (inventoryWithStock) throw new BadRequestException('La unidad de inventario sólo puede cambiarse cuando la existencia sea cero en todas las sucursales.');
@@ -209,6 +211,7 @@ export class CatalogService {
 
   private authorizedBranch(user: AuthenticatedUser, branchId?: string) { const selected = branchId ?? user.branches[0]?.id; if (!selected || !user.branches.some((branch) => branch.id === selected)) throw new ForbiddenException('La sucursal no está autorizada.'); return selected; }
   private async requireCategory(businessId: string, categoryId: string) { const category = await this.prisma.category.findFirst({ where: { id: categoryId, businessId, active: true } }); if (!category) throw new BadRequestException('La categoría no existe o está inactiva.'); }
+  private async requireMeasurementUnits(businessId: string, codes: string[]) { const uniqueCodes = [...new Set(codes)]; const count = await this.prisma.measurementUnit.count({ where: { businessId, code: { in: uniqueCodes }, active: true } }); if (count !== uniqueCodes.length) throw new BadRequestException('Una unidad de medida no existe o está inactiva.'); }
   private calculatedPrice(purchasePrice: number, profitMargin: number) { return Math.round(purchasePrice * (1 + profitMargin / 100) * 100) / 100; }
   private optionalText(value?: string | null) { const clean = value?.trim(); return clean || null; }
   private json(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull { return value == null ? Prisma.JsonNull : JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue; }

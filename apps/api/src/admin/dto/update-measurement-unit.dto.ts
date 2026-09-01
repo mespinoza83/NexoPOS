@@ -14,7 +14,7 @@ export class UpdateMeasurementUnitDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  @Max(3)
+  @Max(2)
   decimals?: number;
 
   @IsOptional()

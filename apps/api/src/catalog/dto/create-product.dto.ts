@@ -1,5 +1,4 @@
 import { Type } from 'class-transformer';
-import { UnitOfMeasure } from '@prisma/client';
 import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUrl, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateProductDto {
@@ -12,11 +11,11 @@ export class CreateProductDto {
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(999.99) profitMargin!: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) salePrice?: number;
   @IsOptional() @IsBoolean() manualSalePrice?: boolean;
-  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) initialQuantity!: number;
-  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) minimumQuantity!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) initialQuantity!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) minimumQuantity!: number;
   @IsOptional() @IsBoolean() availableForSale?: boolean;
-  @IsOptional() @IsEnum(UnitOfMeasure) inventoryUnit?: UnitOfMeasure;
-  @IsOptional() @IsEnum(UnitOfMeasure) saleUnit?: UnitOfMeasure;
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(30) inventoryUnit?: string;
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(30) saleUnit?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @Min(0.000001) saleUnitFactor?: number;
   @IsOptional() @IsBoolean() allowFractionalSale?: boolean;
   @IsOptional() @IsString() @MaxLength(80) presentation?: string;

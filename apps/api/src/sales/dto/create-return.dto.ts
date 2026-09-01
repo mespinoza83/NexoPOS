@@ -3,7 +3,7 @@ import { ArrayMinSize, IsArray, IsNumber, IsOptional, IsString, IsUUID, Min, Min
 
 class ReturnItemDto {
   @IsUUID() invoiceItemId!: string;
-  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.001) quantity!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) quantity!: number;
 }
 
 class ReturnRefundDto {

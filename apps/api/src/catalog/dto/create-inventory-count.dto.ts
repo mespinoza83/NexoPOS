@@ -3,7 +3,7 @@ import { ArrayMinSize, IsArray, IsNumber, IsOptional, IsString, IsUUID, Min, Min
 
 class InventoryCountItemDto {
   @IsUUID() productId!: string;
-  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) countedQuantity!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) countedQuantity!: number;
 }
 
 export class CreateInventoryCountDto {

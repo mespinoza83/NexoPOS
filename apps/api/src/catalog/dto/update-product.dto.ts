@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ProductStatus, UnitOfMeasure } from '@prisma/client';
+import { ProductStatus } from '@prisma/client';
 import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUrl, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class UpdateProductDto {
@@ -13,8 +13,8 @@ export class UpdateProductDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) salePrice?: number;
   @IsOptional() @IsBoolean() manualSalePrice?: boolean;
   @IsOptional() @IsBoolean() availableForSale?: boolean;
-  @IsOptional() @IsEnum(UnitOfMeasure) inventoryUnit?: UnitOfMeasure;
-  @IsOptional() @IsEnum(UnitOfMeasure) saleUnit?: UnitOfMeasure;
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(30) inventoryUnit?: string;
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(30) saleUnit?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @Min(0.000001) saleUnitFactor?: number;
   @IsOptional() @IsBoolean() allowFractionalSale?: boolean;
   @IsOptional() @IsString() @MaxLength(80) presentation?: string | null;
@@ -22,6 +22,6 @@ export class UpdateProductDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) taxRate?: number;
   @IsOptional() @IsUrl({ require_tld: false }) imageUrl?: string | null;
   @IsOptional() @IsEnum(ProductStatus) status?: ProductStatus;
-  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) minimumQuantity?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) minimumQuantity?: number;
   @IsOptional() @IsUUID() branchId?: string;
 }

@@ -166,7 +166,7 @@ export class SalesService {
         if (!isValidSaleQuantity(item.quantity, product.allowFractionalSale)) throw new BadRequestException(`${product.name} sólo se vende en cantidades enteras.`);
         const saleUnitFactor = Number(product.saleUnitFactor);
         const stockQuantity = inventoryQuantityForSale(item.quantity, saleUnitFactor);
-        if (stock < stockQuantity && !user.permissions.includes('sales.negative_inventory')) throw new BadRequestException(`Existencia insuficiente para ${product.name}. Disponible: ${stock.toFixed(3)} ${product.inventoryUnit}.`);
+        if (stock < stockQuantity && !user.permissions.includes('sales.negative_inventory')) throw new BadRequestException(`Existencia insuficiente para ${product.name}. Disponible: ${stock.toFixed(2)} ${product.inventoryUnit}.`);
         const configuredPrice = money(Number(product.salePrice) * conversionFactor);
         if (item.unitPrice !== undefined && money(item.unitPrice) !== configuredPrice && !user.permissions.includes('prices.change')) throw new ForbiddenException(`No tiene permiso para cambiar el precio de ${product.name}.`);
         const unitPrice = item.unitPrice ?? configuredPrice;
@@ -246,7 +246,7 @@ export class SalesService {
         if (!sold) throw new BadRequestException('Uno de los productos no pertenece a la factura.');
         const alreadyReturned = invoice.returns.flatMap((returnDoc) => returnDoc.items).filter((item) => item.invoiceItemId === sold.id).reduce((sum, item) => sum + Number(item.quantity), 0);
         const available = Number(sold.quantity) - alreadyReturned;
-        if (requested.quantity > available) throw new BadRequestException(`La cantidad a devolver supera las ${available.toFixed(3)} unidades disponibles.`);
+        if (requested.quantity > available) throw new BadRequestException(`La cantidad a devolver supera las ${available.toFixed(2)} unidades disponibles.`);
         refundTotal += Number(sold.lineTotal) * requested.quantity / Number(sold.quantity);
       }
       refundTotal = money(refundTotal);

@@ -20,12 +20,13 @@ import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
 import { UpdateCashRegisterDto } from './dto/update-cash-register.dto';
 import { UpdateInvoiceSequenceDto } from './dto/update-invoice-sequence.dto';
 import { UpdateMeasurementUnitDto } from './dto/update-measurement-unit.dto';
+import { CreateMeasurementUnitDto } from './dto/create-measurement-unit.dto';
 
 const DEFAULT_MEASUREMENT_UNITS = [
-  ['UNIT', 'Unidad', 'unid.', 0], ['GRAM', 'Gramo', 'g', 3], ['KILOGRAM', 'Kilogramo', 'kg', 3],
-  ['POUND', 'Libra', 'lb', 3], ['OUNCE', 'Onza', 'oz', 3], ['MILLILITER', 'Mililitro', 'ml', 3],
-  ['LITER', 'Litro', 'L', 3], ['FLUID_OUNCE', 'Onza líquida', 'fl oz', 3], ['METER', 'Metro', 'm', 3],
-  ['CENTIMETER', 'Centímetro', 'cm', 3], ['DOZEN', 'Docena', 'doc.', 3], ['BOX', 'Caja', 'caja', 0],
+  ['UNIT', 'Unidad', 'unid.', 0], ['GRAM', 'Gramo', 'g', 2], ['KILOGRAM', 'Kilogramo', 'kg', 2],
+  ['POUND', 'Libra', 'lb', 2], ['OUNCE', 'Onza', 'oz', 2], ['MILLILITER', 'Mililitro', 'ml', 2],
+  ['LITER', 'Litro', 'L', 2], ['FLUID_OUNCE', 'Onza líquida', 'fl oz', 2], ['METER', 'Metro', 'm', 2],
+  ['CENTIMETER', 'Centímetro', 'cm', 2], ['DOZEN', 'Docena', 'doc.', 2], ['BOX', 'Caja', 'caja', 0],
   ['PACKAGE', 'Paquete', 'paq.', 0],
 ] as const;
 
@@ -69,6 +70,28 @@ export class AdminService {
       ...(dto.decimals !== undefined ? { decimals: dto.decimals } : {}),
       ...(dto.active !== undefined ? { active: dto.active } : {}),
     } });
+    return this.overview(businessId);
+  }
+
+  async createMeasurementUnit(businessId: string, dto: CreateMeasurementUnitDto) {
+    try {
+      await this.prisma.measurementUnit.create({ data: { businessId, code: dto.code.trim().toUpperCase(), name: dto.name.trim(), abbreviation: dto.abbreviation.trim(), decimals: dto.decimals } });
+      return this.overview(businessId);
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Ya existe una unidad con ese código.');
+      throw error;
+    }
+  }
+
+  async deleteMeasurementUnit(businessId: string, unitId: string) {
+    const unit = await this.prisma.measurementUnit.findFirst({ where: { id: unitId, businessId } });
+    if (!unit) throw new NotFoundException('Unidad de medida no encontrada.');
+    const [products, invoices] = await Promise.all([
+      this.prisma.product.count({ where: { businessId, OR: [{ inventoryUnit: unit.code }, { saleUnit: unit.code }] } }),
+      this.prisma.invoiceItem.count({ where: { saleUnit: unit.code, invoice: { branch: { businessId } } } }),
+    ]);
+    if (products || invoices) throw new ConflictException('No se puede eliminar una medida utilizada por productos o facturas. Puede inactivarla.');
+    await this.prisma.measurementUnit.delete({ where: { id: unitId } });
     return this.overview(businessId);
   }
 

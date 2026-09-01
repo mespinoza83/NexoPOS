@@ -2,9 +2,9 @@ import { inventoryQuantityForSale, isValidSaleQuantity } from './units';
 
 describe('unidades de medida', () => {
   it('convierte unidades de venta a la unidad base del inventario', () => {
-    expect(inventoryQuantityForSale(2, 453.592)).toBe(907.184);
+    expect(inventoryQuantityForSale(2, 453.592)).toBe(907.18);
     expect(inventoryQuantityForSale(3, 0.5)).toBe(1.5);
-    expect(inventoryQuantityForSale(0.333, 0.333333)).toBe(0.111);
+    expect(inventoryQuantityForSale(0.33, 0.333333)).toBe(0.11);
   });
 
   it('controla las ventas fraccionadas', () => {
