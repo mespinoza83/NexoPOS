@@ -134,9 +134,26 @@ model Business {
   permissions       Permission[]
   categories        Category[]
   products          Product[]
+  measurementUnits MeasurementUnit[]
   paymentMethods    PaymentMethod[]
   banks             Bank[]
   auditLogs         AuditLog[]
+}
+
+model MeasurementUnit {
+  id           String        @id @default(uuid()) @db.Uuid
+  businessId   String        @db.Uuid
+  code         UnitOfMeasure
+  name         String
+  abbreviation String
+  decimals     Int           @default(3)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, code])
+  @@index([businessId, active])
 }
 
 model Branch {

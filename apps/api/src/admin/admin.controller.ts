@@ -23,6 +23,7 @@ import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
 import { UpdateCashRegisterDto } from './dto/update-cash-register.dto';
 import { UpdateInvoiceSequenceDto } from './dto/update-invoice-sequence.dto';
+import { UpdateMeasurementUnitDto } from './dto/update-measurement-unit.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -60,6 +61,10 @@ export class AdminController {
   @Patch('banks/:bankId')
   @Permissions('settings.manage')
   updateBank(@CurrentUser() user: AuthenticatedUser, @Param('bankId') bankId: string, @Body() body: { name?: string; active?: boolean }) { return this.admin.updateBank(user.businessId, bankId, body); }
+
+  @Patch('measurement-units/:unitId')
+  @Permissions('settings.manage')
+  updateMeasurementUnit(@CurrentUser() user: AuthenticatedUser, @Param('unitId') unitId: string, @Body() dto: UpdateMeasurementUnitDto) { return this.admin.updateMeasurementUnit(user.businessId, unitId, dto); }
 
   @Post('pos-terminals')
   @Permissions('settings.manage')

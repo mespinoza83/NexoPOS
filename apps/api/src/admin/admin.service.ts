@@ -19,13 +19,23 @@ import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
 import { UpdateCashRegisterDto } from './dto/update-cash-register.dto';
 import { UpdateInvoiceSequenceDto } from './dto/update-invoice-sequence.dto';
+import { UpdateMeasurementUnitDto } from './dto/update-measurement-unit.dto';
+
+const DEFAULT_MEASUREMENT_UNITS = [
+  ['UNIT', 'Unidad', 'unid.', 0], ['GRAM', 'Gramo', 'g', 3], ['KILOGRAM', 'Kilogramo', 'kg', 3],
+  ['POUND', 'Libra', 'lb', 3], ['OUNCE', 'Onza', 'oz', 3], ['MILLILITER', 'Mililitro', 'ml', 3],
+  ['LITER', 'Litro', 'L', 3], ['FLUID_OUNCE', 'Onza líquida', 'fl oz', 3], ['METER', 'Metro', 'm', 3],
+  ['CENTIMETER', 'Centímetro', 'cm', 3], ['DOZEN', 'Docena', 'doc.', 3], ['BOX', 'Caja', 'caja', 0],
+  ['PACKAGE', 'Paquete', 'paq.', 0],
+] as const;
 
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   async overview(businessId: string) {
-    const [users, roles, permissions, branches, business, banks, customers, terminals, paymentMethods, cashRegisters, invoiceSequences] = await Promise.all([
+    await this.ensureMeasurementUnits(businessId);
+    const [users, roles, permissions, branches, business, banks, customers, terminals, paymentMethods, cashRegisters, invoiceSequences, measurementUnits] = await Promise.all([
       this.prisma.user.findMany({ where: { businessId }, select: { id: true, email: true, firstName: true, lastName: true, status: true, roles: { select: { role: { select: { id: true, code: true, name: true } } } }, branches: { select: { branch: { select: { id: true, code: true, name: true } } } } }, orderBy: { lastName: 'asc' } }),
       this.prisma.role.findMany({ where: { businessId }, include: { permissions: { include: { permission: true } }, _count: { select: { users: true } } }, orderBy: { name: 'asc' } }),
       this.prisma.permission.findMany({ where: { businessId }, orderBy: { code: 'asc' } }),
@@ -37,8 +47,29 @@ export class AdminService {
       this.prisma.paymentMethod.findMany({ where: { businessId }, select: { id: true, code: true, name: true, kind: true, active: true, _count: { select: { payments: true, returnRefunds: true } } }, orderBy: { name: 'asc' } }),
       this.prisma.cashRegister.findMany({ where: { branch: { businessId } }, select: { id: true, branchId: true, code: true, name: true, active: true, branch: { select: { id: true, name: true } }, _count: { select: { sessions: true } } }, orderBy: [{ branch: { name: 'asc' } }, { name: 'asc' }] }),
       this.prisma.invoiceSequence.findMany({ where: { branch: { businessId } }, select: { id: true, branchId: true, series: true, next: true, branch: { select: { id: true, name: true } } }, orderBy: { branch: { name: 'asc' } } }),
+      this.prisma.measurementUnit.findMany({ where: { businessId }, select: { id: true, code: true, name: true, abbreviation: true, decimals: true, active: true }, orderBy: { name: 'asc' } }),
     ]);
-    return { users, roles, permissions, branches, business, banks, customers, terminals, paymentMethods, cashRegisters, invoiceSequences };
+    return { users, roles, permissions, branches, business, banks, customers, terminals, paymentMethods, cashRegisters, invoiceSequences, measurementUnits };
+  }
+
+  private async ensureMeasurementUnits(businessId: string) {
+    await this.prisma.$transaction(DEFAULT_MEASUREMENT_UNITS.map(([code, name, abbreviation, decimals]) => this.prisma.measurementUnit.upsert({
+      where: { businessId_code: { businessId, code } },
+      create: { businessId, code, name, abbreviation, decimals },
+      update: {},
+    })));
+  }
+
+  async updateMeasurementUnit(businessId: string, unitId: string, dto: UpdateMeasurementUnitDto) {
+    const unit = await this.prisma.measurementUnit.findFirst({ where: { id: unitId, businessId } });
+    if (!unit) throw new NotFoundException('Unidad de medida no encontrada.');
+    await this.prisma.measurementUnit.update({ where: { id: unitId }, data: {
+      ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+      ...(dto.abbreviation !== undefined ? { abbreviation: dto.abbreviation.trim() } : {}),
+      ...(dto.decimals !== undefined ? { decimals: dto.decimals } : {}),
+      ...(dto.active !== undefined ? { active: dto.active } : {}),
+    } });
+    return this.overview(businessId);
   }
 
   async auditLogs(businessId: string, query: Record<string, string | undefined>) {

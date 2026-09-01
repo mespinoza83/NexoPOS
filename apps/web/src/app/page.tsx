@@ -7,6 +7,7 @@ import { MainSidebar } from './components/main-sidebar';
 import { CustomersView } from './components/customers-view';
 import { BranchesView } from './components/branches-view';
 import { BanksView } from './components/banks-view';
+import { MeasurementUnitsView, type MeasurementUnit } from './components/measurement-units-view';
 import { AuditView } from './components/audit-view';
 import type { AdminSection } from './components/admin-tabs';
 
@@ -85,6 +86,7 @@ type AdminData = {
   invoiceSequences: Array<{ id: string; branchId: string; series: string; next: number; branch: { id: string; name: string } }>;
   customers: Array<{ id: string; name: string; taxId?: string | null; phone?: string | null; email?: string | null; active: boolean; _count: { invoices: number } }>;
   business: BusinessSettings & { taxesEnabled: boolean; ivaRate: string | number };
+  measurementUnits: MeasurementUnit[];
 };
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
@@ -136,6 +138,7 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState('dashboard');
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
+  const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnit[]>([]);
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
   const [inventoryEntries, setInventoryEntries] = useState<InventoryEntry[]>([]);
   const [inventoryCounts, setInventoryCounts] = useState<InventoryCount[]>([]);
@@ -227,18 +230,20 @@ export default function HomePage() {
     setActiveView('inventory');
     setCatalogLoading(true);
     try {
-      const [productsResponse, categoriesResponse, movementsResponse, entriesResponse, countsResponse] = await Promise.all([
+      const [productsResponse, categoriesResponse, movementsResponse, entriesResponse, countsResponse, unitsResponse] = await Promise.all([
         authenticatedFetch(`${apiUrl}/catalog/products?branchId=${user?.branches[0]?.id ?? ''}`),
         authenticatedFetch(`${apiUrl}/catalog/categories`),
         authenticatedFetch(`${apiUrl}/catalog/inventory-movements?branchId=${user?.branches[0]?.id ?? ''}`),
         authenticatedFetch(`${apiUrl}/catalog/inventory-entries?branchId=${user?.branches[0]?.id ?? ''}`),
         authenticatedFetch(`${apiUrl}/catalog/inventory-counts?branchId=${user?.branches[0]?.id ?? ''}`),
+        authenticatedFetch(`${apiUrl}/catalog/measurement-units`),
       ]);
       if (productsResponse.ok) setProducts((await productsResponse.json()) as CatalogProduct[]);
       if (categoriesResponse.ok) setCategories((await categoriesResponse.json()) as CatalogCategory[]);
       if (movementsResponse.ok) setInventoryMovements((await movementsResponse.json()) as InventoryMovement[]);
       if (entriesResponse.ok) setInventoryEntries((await entriesResponse.json()) as InventoryEntry[]);
       if (countsResponse.ok) setInventoryCounts((await countsResponse.json()) as InventoryCount[]);
+      if (unitsResponse.ok) setMeasurementUnits((await unitsResponse.json()) as MeasurementUnit[]);
     } finally {
       setCatalogLoading(false);
     }
@@ -257,6 +262,7 @@ export default function HomePage() {
         users: result.users ?? [],
         roles: result.roles ?? [],
         permissions: result.permissions ?? [],
+        measurementUnits: result.measurementUnits ?? [],
         banks: result.banks ?? [],
         customers: result.customers ?? [],
         branches: (result.branches ?? []).map((branch) => ({
@@ -300,7 +306,7 @@ export default function HomePage() {
     if (activeView === 'customers') return adminData ? <CustomersView user={user} customers={adminData.customers} apiUrl={apiUrl} request={authenticatedFetch} onBack={() => setActiveView('dashboard')} onSales={openSales} onInventory={openCatalog} onCash={openCash} onReports={() => setActiveView('sales-history')} onAdmin={openAdmin} onRefresh={openCustomers} onLogout={handleLogout} /> : <AdminStatusView loading={adminLoading} error={adminError} onRetry={openCustomers} onBack={() => setActiveView('dashboard')} />;
     if (activeView === 'admin') return adminData ? <AdminView user={user} data={adminData} loading={adminLoading} onBack={() => setActiveView('dashboard')} onSales={openSales} onInventory={openCatalog} onCash={openCash} onReports={() => setActiveView('sales-history')} onCustomers={openCustomers} onRefresh={openAdmin} onLogout={handleLogout} /> : <AdminStatusView loading={adminLoading} error={adminError} onRetry={openAdmin} onBack={() => setActiveView('dashboard')} />;
     if (activeView === 'inventory') {
-      return <InventoryView user={user} products={products} categories={categories} movements={inventoryMovements} entries={inventoryEntries} counts={inventoryCounts} loading={catalogLoading} onRefresh={openCatalog} onBack={() => setActiveView('dashboard')} onSales={openSales} onCash={openCash} onReports={() => setActiveView('sales-history')} onCustomers={openCustomers} onAdmin={openAdmin} onLogout={handleLogout} />;
+      return <InventoryView user={user} products={products} categories={categories} measurementUnits={measurementUnits} movements={inventoryMovements} entries={inventoryEntries} counts={inventoryCounts} loading={catalogLoading} onRefresh={openCatalog} onBack={() => setActiveView('dashboard')} onSales={openSales} onCash={openCash} onReports={() => setActiveView('sales-history')} onCustomers={openCustomers} onAdmin={openAdmin} onLogout={handleLogout} />;
     }
     if (activeView === 'sales' && salesSetup) return <SalesView user={user} products={products} setup={salesSetup} invoices={salesHistory} loading={salesLoading} onRefresh={openSales} onReports={() => setActiveView('sales-history')} onBack={() => setActiveView('dashboard')} onInventory={openCatalog} onCash={openCash} onCustomers={openCustomers} onAdmin={openAdmin} onLogout={handleLogout} />;
     if (activeView === 'sales-history') return <SalesHistoryView user={user} onProducts={() => setActiveView('product-report')} onInventoryReport={() => setActiveView('inventory-report')} onCashReport={() => setActiveView('cash-report')} onBack={() => setActiveView('sales')} onDashboard={() => setActiveView('dashboard')} onInventory={openCatalog} onCash={openCash} onCustomers={openCustomers} onAdmin={openAdmin} onLogout={handleLogout} />;
@@ -650,7 +656,7 @@ function SaleDetailModal({ invoice, canVoid, canReturn, onVoid, onReturn, onPrin
   return <div className="modal-backdrop sale-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="sale-detail-modal" role="dialog" aria-modal="true" aria-labelledby="sale-detail-title"><ThermalReceipt invoice={invoice} /><header><div><p className="eyebrow">Detalle de venta</p><h2 id="sale-detail-title">Factura {invoice.number}</h2><span>{new Date(invoice.paidAt ?? invoice.createdAt).toLocaleString('es-NI')} · {invoice.customer?.name ?? 'Consumidor final'}</span></div><button type="button" onClick={onClose} aria-label="Cerrar">×</button></header><div className="sale-detail-meta"><span>Estado<strong className={invoice.status === 'PAID' ? 'sale-paid' : 'sale-voided'}>{status}</strong></span><span>Cajero<strong>{invoice.createdBy ? `${invoice.createdBy.firstName} ${invoice.createdBy.lastName}` : 'No disponible'}</strong></span><span>Productos<strong>{invoice.items.length}</strong></span></div><div className="sale-detail-table"><div className="sale-detail-row sale-detail-heading"><span>Producto</span><span>Cant.</span><span>Precio</span><span>Desc.</span><span>Impuesto</span><span>Total</span></div>{invoice.items.map((item) => <div className="sale-detail-row" key={item.id}><span><strong>{item.product.name}</strong><small>{item.product.internalCode}</small></span><span>{Number(item.quantity).toFixed(3)}</span><span>{currencySymbol} {Number(item.unitPrice).toFixed(2)}</span><span>{Number(item.discountPercent).toFixed(2)}%<small>- {currencySymbol} {Number(item.discountAmount).toFixed(2)}</small></span><span>{Number(item.taxRate).toFixed(2)}%<small>{currencySymbol} {Number(item.taxAmount).toFixed(2)}</small></span><strong>{currencySymbol} {Number(item.lineTotal).toFixed(2)}</strong></div>)}</div><div className="sale-detail-footer"><section><h3>Pagos</h3>{invoice.payments.map((payment) => <div className="sale-payment-detail" key={payment.id}><span><strong>{payment.paymentMethod.name}</strong><small>{[payment.bank?.name, payment.posTerminal?.name, payment.cardType === 'DEBIT' ? 'Débito' : payment.cardType === 'CREDIT' ? 'Crédito' : null, payment.reference ? `Ref. ${payment.reference}` : null].filter(Boolean).join(' · ')}</small></span><b>{currencySymbol} {Number(payment.amount).toFixed(2)}</b></div>)}</section><dl><div><dt>Subtotal</dt><dd>{currencySymbol} {Number(invoice.subtotal).toFixed(2)}</dd></div><div><dt>Descuentos</dt><dd>- {currencySymbol} {Number(invoice.discountTotal).toFixed(2)}</dd></div><div><dt>Impuestos</dt><dd>{currencySymbol} {Number(invoice.taxTotal).toFixed(2)}</dd></div><div className="sale-detail-total"><dt>Total</dt><dd>{currencySymbol} {Number(invoice.total).toFixed(2)}</dd></div><div><dt>Pagado</dt><dd>{currencySymbol} {paid.toFixed(2)}</dd></div><div><dt>Cambio</dt><dd>{currencySymbol} {Number(invoice.changeAmount).toFixed(2)}</dd></div></dl></div>{invoice.discounts.length > 0 && <div className="sale-discount-notes"><strong>Motivos de descuento</strong>{invoice.discounts.map((discount) => <span key={discount.id}>{discount.scope === 'INVOICE' ? 'Factura' : 'Producto'}: {discount.reason} ({Number(discount.percent).toFixed(2)}%)</span>)}</div>}<footer><div>{canVoid && invoice.status === 'PAID' && <button className="sale-void-action" type="button" onClick={onVoid}>Anular venta</button>}{canReturn && ['PAID', 'PARTIALLY_RETURNED'].includes(invoice.status) && <button className="sale-return-action" type="button" onClick={onReturn}>Registrar devolución</button>}</div><button className="secondary-action" type="button" onClick={onPrint}>Imprimir comprobante</button><button className="primary-action" type="button" onClick={onClose}>Cerrar</button></footer></section></div>;
 }
 
-function InventoryView({ user, products, categories, movements, entries, counts, loading, onRefresh, onBack, onSales, onCash, onReports, onCustomers, onAdmin, onLogout }: { user: AuthUser; products: CatalogProduct[]; categories: CatalogCategory[]; movements: InventoryMovement[]; entries: InventoryEntry[]; counts: InventoryCount[]; loading: boolean; onRefresh: () => Promise<void>; onBack: () => void; onSales: () => Promise<void>; onCash: () => Promise<void>; onReports: () => void; onCustomers: () => Promise<void>; onAdmin: () => Promise<void>; onLogout: () => void }) {
+function InventoryView({ user, products, categories, measurementUnits, movements, entries, counts, loading, onRefresh, onBack, onSales, onCash, onReports, onCustomers, onAdmin, onLogout }: { user: AuthUser; products: CatalogProduct[]; categories: CatalogCategory[]; measurementUnits: MeasurementUnit[]; movements: InventoryMovement[]; entries: InventoryEntry[]; counts: InventoryCount[]; loading: boolean; onRefresh: () => Promise<void>; onBack: () => void; onSales: () => Promise<void>; onCash: () => Promise<void>; onReports: () => void; onCustomers: () => Promise<void>; onAdmin: () => Promise<void>; onLogout: () => void }) {
   const totalProducts = products.length;
   const stockAlerts = products.map((product) => ({ product, alert: getStockAlert(Number(product.inventory[0]?.quantity ?? 0), Number(product.inventory[0]?.minimumQuantity ?? 0)) })).filter(({ alert }) => alert.level !== 'HEALTHY');
   const lowStock = stockAlerts.length;
@@ -658,6 +664,9 @@ function InventoryView({ user, products, categories, movements, entries, counts,
   const [showProductForm, setShowProductForm] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [editingProduct, setEditingProduct] = useState<CatalogProduct | null>(null);
+  const availableUnitOptions = measurementUnits.length
+    ? measurementUnits.filter((unit) => unit.active || unit.code === editingProduct?.inventoryUnit || unit.code === editingProduct?.saleUnit).map((unit) => ({ value: unit.code as UnitOfMeasure, label: `${unit.name} (${unit.abbreviation})`, abbreviation: unit.abbreviation }))
+    : unitOptions;
   const [barcodeValue, setBarcodeValue] = useState('');
   const [productPage, setProductPage] = useState(1);
   const [productsPerPage, setProductsPerPage] = useState(8);
@@ -818,8 +827,8 @@ function InventoryView({ user, products, categories, movements, entries, counts,
             <label className="field-wide">Descripción<textarea name="description" rows={2} defaultValue={editingProduct?.description ?? ''} /></label>
             <label>Categoría<select name="categoryId" required defaultValue={editingProduct?.category.id ?? categories.find((item) => item.active)?.id}>{categories.filter((item) => item.active || item.id === editingProduct?.category.id).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
             <label>Presentación<input name="presentation" maxLength={80} defaultValue={editingProduct?.presentation ?? ''} placeholder="Ej. Botella 12 oz" /></label>
-            <label>Unidad de inventario<select name="inventoryUnit" defaultValue={editingProduct?.inventoryUnit ?? 'UNIT'}>{unitOptions.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label>
-            <label>Unidad de venta<select name="saleUnit" defaultValue={editingProduct?.saleUnit ?? 'UNIT'}>{unitOptions.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label>
+            <label>Unidad de inventario<select name="inventoryUnit" defaultValue={editingProduct?.inventoryUnit ?? 'UNIT'}>{availableUnitOptions.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label>
+            <label>Unidad de venta<select name="saleUnit" defaultValue={editingProduct?.saleUnit ?? 'UNIT'}>{availableUnitOptions.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label>
             <label>Equivalencia en inventario<input name="saleUnitFactor" type="number" min="0.000001" step="0.000001" required defaultValue={editingProduct?.saleUnitFactor ?? 1} /><small>Cantidad base descontada por cada unidad vendida.</small></label>
             <label>Precio de compra<input name="purchasePrice" type="number" min="0" step="0.01" required defaultValue={editingProduct?.purchasePrice ?? 0} /></label>
             <label>Ganancia %<input name="profitMargin" type="number" min="0" max="999.99" step="0.01" required defaultValue={editingProduct?.profitMargin ?? 0} /></label>
@@ -851,7 +860,7 @@ function AdminStatusView({ loading, error, onRetry, onBack }: { loading: boolean
 
 function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, onReports, onCustomers, onRefresh, onLogout }: { user: AuthUser; data: AdminData; loading: boolean; onBack: () => void; onSales: () => Promise<void>; onInventory: () => Promise<void>; onCash: () => Promise<void>; onReports: () => void; onCustomers: () => Promise<void>; onRefresh: () => Promise<void>; onLogout: () => void }) {
   data = { ...data, banks: data.banks ?? [], branches: data.branches ?? [], customers: data.customers ?? [] };
-  const [tab, setTabState] = useState<AdminSection | (string & { readonly __adminSection: unique symbol })>(user.permissions?.includes('users.manage') ? 'users' : user.permissions?.includes('roles.manage') ? 'roles' : user.permissions?.includes('settings.manage') ? 'branches' : 'audit');
+  const [tab, setTabState] = useState<AdminSection | (string & { readonly __adminSection: unique symbol })>(user.permissions?.includes('settings.manage') ? 'units' : user.permissions?.includes('users.manage') ? 'users' : user.permissions?.includes('roles.manage') ? 'roles' : 'audit');
   const setTab = (section: AdminSection) => setTabState(section);
   const [roleId, setRoleId] = useState(data.roles[0]?.id ?? '');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(data.roles[0]?.permissions.map(({ permission }) => permission.id) ?? []);
@@ -1067,6 +1076,10 @@ function AdminView({ user, data, loading, onBack, onSales, onInventory, onCash, 
 
   if ((tab as AdminSection) === 'banks') {
     return <BanksView user={user} banks={data.banks} branches={data.branches} terminals={data.terminals} paymentMethods={data.paymentMethods} counts={{ users: data.users.length, roles: data.roles.length, permissions: data.permissions.length }} apiUrl={apiUrl} request={authenticatedFetch} onSection={setTab} onBack={onBack} onSales={onSales} onInventory={onInventory} onCash={onCash} onReports={onReports} onCustomers={onCustomers} onRefresh={onRefresh} onLogout={onLogout} />;
+  }
+
+  if (tab === 'units') {
+    return <MeasurementUnitsView user={user} units={data.measurementUnits} counts={{ users: data.users.length, roles: data.roles.length, permissions: data.permissions.length, branches: data.branches.length, banks: data.banks.length }} apiUrl={apiUrl} request={authenticatedFetch} onSection={setTab} onBack={onBack} onSales={onSales} onInventory={onInventory} onCash={onCash} onReports={onReports} onCustomers={onCustomers} onRefresh={onRefresh} onLogout={onLogout} />;
   }
 
   if (tab === 'audit') {

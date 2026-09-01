@@ -28,6 +28,10 @@ export class CatalogController {
   @Permissions('products.read')
   categories(@CurrentUser() user: AuthenticatedUser) { return this.catalog.listCategories(user.businessId); }
 
+  @Get('measurement-units')
+  @Permissions('products.read')
+  measurementUnits(@CurrentUser() user: AuthenticatedUser) { return this.catalog.listMeasurementUnits(user.businessId); }
+
   @Get('inventory-movements')
   @Permissions('inventory.read')
   inventoryMovements(@CurrentUser() user: AuthenticatedUser, @Query('branchId') branchId?: string) { return this.catalog.listInventoryMovements(user, branchId); }

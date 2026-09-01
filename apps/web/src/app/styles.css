@@ -217,6 +217,24 @@ button:disabled { cursor: wait; opacity: .65; }
 .directory-row { grid-template-columns: 2rem minmax(190px, 1.4fr) minmax(120px, .8fr) auto auto; }
 .directory-row .user-action-button { justify-self: end; }
 .directory-actions { display: flex; gap: .4rem; justify-self: end; }
+
+/* Keep financial actions inside narrow cards. */
+.bank-admin-layout .bank-row { grid-template-columns: 2rem minmax(0, 1fr) auto; }
+.bank-admin-layout .bank-row .directory-actions { grid-column: 2 / -1; justify-content: flex-end; justify-self: stretch; flex-wrap: wrap; min-width: 0; }
+.bank-admin-layout .bank-row .user-action-button { min-width: 0; white-space: nowrap; }
+
+.measurement-units-panel { margin-top: 1.8rem; padding: 1.75rem; border: 1px solid var(--line); background: #fff; border-radius: .35rem; }
+.measurement-unit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin-top: 1.25rem; }
+.measurement-unit-card { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr) auto; align-items: center; gap: .8rem; padding: 1rem; border: 1px solid var(--line); border-radius: .35rem; }
+.measurement-unit-card > span:nth-child(2) { min-width: 0; }
+.measurement-unit-card strong, .measurement-unit-card small { display: block; }
+.measurement-unit-card small { margin-top: .2rem; color: var(--muted); }
+.measurement-unit-card .directory-actions { grid-column: 2 / -1; justify-self: stretch; justify-content: flex-end; flex-wrap: wrap; }
+.unit-symbol { display: grid; place-items: center; width: 3rem; height: 3rem; padding: .25rem; border-radius: 50%; color: var(--teal); background: #e7f4f4; font-weight: 700; text-align: center; font-size: .78rem; }
+
+@media (max-width: 900px) {
+  .measurement-unit-grid { grid-template-columns: 1fr; }
+}
 .swal-field { display: grid; gap: .25rem; margin: .55rem 1.5rem; text-align: left; }
 .swal-field .swal2-input, .swal-field .swal2-select { margin: 0; width: 100%; }
 .audit-panel, .audit-detail { background: #fff; border: 1px solid #e3eaed; border-radius: 5px; }

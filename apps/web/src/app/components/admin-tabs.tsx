@@ -1,8 +1,8 @@
-export type AdminSection = 'users' | 'roles' | 'permissions' | 'banks' | 'branches' | 'taxes' | 'audit';
+export type AdminSection = 'users' | 'roles' | 'permissions' | 'banks' | 'branches' | 'units' | 'taxes' | 'audit';
 
 type Props = {
   active: AdminSection;
-  counts: { users: number; roles: number; permissions: number; branches: number; banks: number };
+  counts: { users: number; roles: number; permissions: number; branches: number; banks: number; units?: number };
   onChange: (section: AdminSection) => void;
 };
 
@@ -13,6 +13,7 @@ export function AdminTabs({ active, counts, onChange }: Props) {
     { section: 'permissions', label: 'Permisos', count: counts.permissions },
     { section: 'branches', label: 'Sucursales', count: counts.branches },
     { section: 'banks', label: 'Bancos', count: counts.banks },
+    { section: 'units', label: 'Medidas', count: counts.units },
     { section: 'taxes', label: 'Configuración' },
     { section: 'audit', label: 'Auditoría' },
   ];

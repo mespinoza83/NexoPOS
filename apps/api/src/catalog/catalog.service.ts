@@ -34,6 +34,10 @@ export class CatalogService {
     return this.prisma.category.findMany({ where: { businessId }, include: { _count: { select: { products: true } } }, orderBy: { name: 'asc' } });
   }
 
+  listMeasurementUnits(businessId: string) {
+    return this.prisma.measurementUnit.findMany({ where: { businessId }, select: { id: true, code: true, name: true, abbreviation: true, decimals: true, active: true }, orderBy: { name: 'asc' } });
+  }
+
   async listInventoryMovements(user: AuthenticatedUser, branchId?: string) {
     const selectedBranchId = this.authorizedBranch(user, branchId);
     const movements = await this.prisma.inventoryMovement.findMany({
