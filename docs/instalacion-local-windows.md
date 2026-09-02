@@ -26,7 +26,11 @@ powershell -ExecutionPolicy Bypass -File deployment\windows\build-package.ps1 `
   -CompileInstaller
 ```
 
-El resultado se crea en `deployment\windows\dist\NexoPOS-Setup-x64.exe`.
+El resultado se crea en `deployment\windows\dist\NexoPOS-Setup-1.1.0-x64.exe`.
+
+## Actualizar una instalación existente
+
+La versión 1.1.0 detecta automáticamente una instalación previa. Antes de reemplazar los binarios detiene NexoPOS y crea un respaldo en `C:\ProgramData\NexoPOS\backups`. Conserva la base de datos, la licencia, las credenciales y los secretos existentes; después aplica únicamente las migraciones pendientes y vuelve a iniciar los servicios. Si el respaldo falla, la actualización se cancela.
 
 ## Instalación en la laptop
 

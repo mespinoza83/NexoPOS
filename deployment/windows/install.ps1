@@ -9,6 +9,32 @@ if ($AdminPassword.Length -lt 12) { throw 'La contraseña administrativa debe te
 $dataDir = Join-Path $env:ProgramData 'NexoPOS'
 New-Item -ItemType Directory -Force $dataDir,(Join-Path $dataDir 'logs'),(Join-Path $dataDir 'backups') | Out-Null
 
+$configFile = Join-Path $dataDir 'nexopos.env'
+$existingPostgres = Join-Path $InstallDir 'postgres\bin\pg_dump.exe'
+$isUpgrade = (Test-Path -LiteralPath $configFile) -and (Test-Path -LiteralPath $existingPostgres)
+if ($isUpgrade) {
+  Get-Content -LiteralPath $configFile | ForEach-Object { $pair=$_ -split '=',2; if($pair.Count -eq 2){[Environment]::SetEnvironmentVariable($pair[0],$pair[1],'Process')} }
+  Push-Location (Join-Path $InstallDir 'api')
+  try {
+    & (Join-Path $InstallDir 'runtime\node.exe') 'node_modules\prisma\build\index.js' migrate deploy
+    if ($LASTEXITCODE -ne 0) { throw 'Fallo la migracion de actualizacion.' }
+  } finally { Pop-Location }
+  $taskUser = 'SYSTEM'
+  $startScript = Join-Path $InstallDir 'runtime-scripts\start-nexopos.ps1'
+  $backupScript = Join-Path $InstallDir 'runtime-scripts\backup-nexopos.ps1'
+  schtasks /Create /TN 'NexoPOS Inicio' /SC ONSTART /RU $taskUser /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$startScript`" -InstallDir `"$InstallDir`"" /F | Out-Null
+  schtasks /Create /TN 'NexoPOS Respaldo Diario' /SC DAILY /ST 02:00 /RU $taskUser /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$backupScript`" -InstallDir `"$InstallDir`"" /F | Out-Null
+  & $startScript -InstallDir $InstallDir
+  $licenseFile = Join-Path $dataDir 'license.json'
+  if (Test-Path $licenseFile) {
+    $license = Get-Content $licenseFile -Raw | ConvertFrom-Json
+    $license | Add-Member -NotePropertyName version -NotePropertyValue '1.1.0' -Force
+    $license | Add-Member -NotePropertyName updatedAt -NotePropertyValue (Get-Date).ToString('o') -Force
+    $license | ConvertTo-Json | Set-Content $licenseFile -Encoding utf8
+  }
+  exit 0
+}
+
 function New-Secret([int]$Length=40) {
   $bytes = New-Object byte[] $Length
   $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
@@ -69,4 +95,4 @@ $backupScript = Join-Path $InstallDir 'runtime-scripts\backup-nexopos.ps1'
 schtasks /Create /TN 'NexoPOS Inicio' /SC ONSTART /RU $taskUser /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$startScript`" -InstallDir `"$InstallDir`"" /F | Out-Null
 schtasks /Create /TN 'NexoPOS Respaldo Diario' /SC DAILY /ST 02:00 /RU $taskUser /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$backupScript`" -InstallDir `"$InstallDir`"" /F | Out-Null
 & $startScript -InstallDir $InstallDir
-@{ customer=$CustomerName; installationId=$installationId; installedAt=(Get-Date).ToString('o'); licenseType='PERPETUAL_SINGLE_DEVICE' } | ConvertTo-Json | Set-Content (Join-Path $dataDir 'license.json') -Encoding utf8
+@{ customer=$CustomerName; installationId=$installationId; installedAt=(Get-Date).ToString('o'); licenseType='PERPETUAL_SINGLE_DEVICE'; version='1.1.0' } | ConvertTo-Json | Set-Content (Join-Path $dataDir 'license.json') -Encoding utf8
